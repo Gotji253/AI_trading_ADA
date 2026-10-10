@@ -1,6 +1,6 @@
 """
 Hourly analysis runner (for cron or Hermes scheduler).
-Sends Telegram alert if configured.
+Sends natural Thai Telegram alert if configured.
 """
 
 import json
@@ -12,6 +12,15 @@ from src.data.news import NewsSentiment
 from src.data.onchain import CardanoOnChain
 from src.memory.trade_memory import TradeMemory
 from src.notify.telegram import TelegramNotifier
+
+
+def _consensus_thai(consensus: str) -> str:
+    mapping = {
+        "buy": "น่าซื้อ",
+        "sell": "น่าขาย",
+        "hold": "ถือรอ",
+    }
+    return mapping.get(consensus.lower(), consensus)
 
 
 def run_hourly_analysis(send_telegram: bool = True) -> dict:
@@ -33,13 +42,19 @@ def run_hourly_analysis(send_telegram: bool = True) -> dict:
     strongest = result["multi_tf"].get("strongest_timeframe", "-")
     nearest_sup = result["levels"].get("nearest_support")
     nearest_res = result["levels"].get("nearest_resistance")
+    price = result["levels"].get("current_price")
+
+    thai_consensus = _consensus_thai(consensus)
+    strength_text = "แข็ง" if strength >= 0.6 else "ปานกลาง" if strength >= 0.4 else "อ่อน"
 
     alert_text = (
-        f"ADA Hourly Report\n"
-        f"Consensus: {consensus.upper()} (strength {strength})\n"
-        f"Strongest TF: {strongest}\n"
-        f"Support: {nearest_sup} | Resistance: {nearest_res}\n"
-        f"Time: {result['timestamp']}"
+        f"สรุป ADA รายชั่วโมง\n\n"
+        f"สัญญาณหลัก: {thai_consensus} ({strength_text})\n"
+        f"ราคาปัจจุบัน: {price} USDT\n"
+        f"ไทม์เฟรมที่แข็งที่สุด: {strongest}\n"
+        f"แนวรับรับ: {nearest_sup or '-'}\n"
+        f"แนวต้าน: {nearest_res or '-'}\n\n"
+        f"นี้เป็นการวิเคราะห์เท่านั้น ยังไม่ได้เทรดจริง"
     )
     result["alert"] = alert_text
 
