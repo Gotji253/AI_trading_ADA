@@ -1,5 +1,6 @@
 """
 Self-Improvement Engine — orchestrates the full feedback cycle.
+รวม Attribution_Agent
 """
 
 from typing import Dict, Any
@@ -7,6 +8,7 @@ from typing import Dict, Any
 from src.memory.optimizer import AdaptiveOptimizer
 from src.memory.validator import ParameterValidator
 from src.memory.trade_memory import TradeMemory
+from src.agents.attribution_agent import AttributionAgent
 
 
 class SelfImprovementEngine:
@@ -14,32 +16,36 @@ class SelfImprovementEngine:
         self.optimizer = AdaptiveOptimizer()
         self.validator = ParameterValidator()
         self.memory = TradeMemory()
+        self.attribution = AttributionAgent()
 
     def run_cycle(self) -> Dict[str, Any]:
         """
         Full cycle:
         1. Update memory
-        2. Generate suggestions (Adaptive Optimization)
-        3. Validate with short backtest (Walk-Forward gate)
-        4. Return approval status
+        2. Attribution analysis
+        3. Generate suggestions (Adaptive Optimization)
+        4. Validate with short backtest
         """
-        # 1. Refresh memory
         mem = self.memory.update_from_paper()
 
-        # 2. Optimize
+        # Attribution matrix
+        attr_result = self.attribution.analyze()
+
+        # Optimize
         opt = self.optimizer.suggest()
 
-        # 3. Validate proposed params
+        # Validate
         proposed = opt.get("parsed_suggestion", {})
         validation = self.validator.validate(proposed)
 
         return {
             "status": "ok",
             "memory_updated": True,
+            "attribution": attr_result,
             "optimization": opt,
             "validation": validation,
             "ready_to_apply": validation.get("approved", False),
-            "message": "Review validation result before applying any parameter changes.",
+            "message": "Review validation and attribution before applying changes.",
         }
 
 
