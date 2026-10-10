@@ -1,53 +1,39 @@
 ---
 name: ada-trader
-description: Analyze Cardano (ADA) only and generate buy/sell/hold signals with RSI, EMA, MACD. Use when the user asks about ADA price, trading signal, or analysis. Requires the AI_trading_ADA repo on the machine.
-version: 1.1.0
+description: Analyze ADA and run paper trading. Generate signals and simulate trades. Use for ADA analysis or paper trading status.
+version: 1.2.0
 author: AI_trading_ADA
 license: MIT
 platforms: [linux, macos, windows]
 metadata:
   hermes:
-    tags: [ADA, Cardano, Trading, Crypto, Signals]
+    tags: [ADA, Cardano, Trading, Paper, Signals]
     category: finance
     requires_toolsets: [terminal]
 ---
 
-# ADA Trader Skill
+# ADA Trader Skill (with Paper Trading)
 
-**ADA only.** Never analyze or trade other coins.
+ADA only. Paper trading by default.
 
-## When to Use
-
-User asks for ADA price, analysis, signal, or market view.
-
-## Prerequisites
-
-1. This repo is cloned and `pip install -r requirements.txt` has been run.
-2. `.env` file exists with at least `BINANCE_API_KEY` and `BINANCE_API_SECRET` (recommended).
-3. Working directory is the repo root (or PYTHONPATH includes it).
-
-## How to Run
-
-Use the `terminal` tool:
+## Commands (via terminal)
 
 ```bash
-# Check keys and mode
 python -m src.cli status
-
-# Get signal
 python -m src.cli ada-signal --interval 1h
+python -m src.cli paper-status
+python -m src.cli paper-auto --interval 1h
+python -m src.cli paper-history
 ```
 
 ## Procedure
 
-1. Optionally run `status` first to confirm keys are loaded.
-2. Run `ada-signal` (or `ada-price`).
-3. Parse the JSON.
-4. Reply with a short Thai summary including price, signal, confidence, RSI, stop-loss, take-profit.
-5. Remind that current mode is analysis/paper — no live orders without explicit user confirmation.
+1. For analysis: run `ada-signal`.
+2. For paper trading: run `paper-auto` (it will open/close virtual positions based on the signal).
+3. Check account with `paper-status`.
+4. Always state that this is paper trading — no real money.
 
 ## Safety
 
-- ADA only.
-- Default `TRADING_MODE=paper`.
-- Do not place live orders.
+- Never place real orders.
+- Paper state is stored locally in `data/paper_state.json`.
