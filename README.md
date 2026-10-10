@@ -1,15 +1,14 @@
 # AI_trading_ADA
 
-Hermes Agent for **Cardano (ADA) only** with learning from paper trades.
+Hermes Agent + **Multi-Agent** (Manager / Alpha / Risk / Execution) สำหรับ ADA
 
 ## Features
 
-- Technical signals + Multi-timeframe
-- Support/Resistance, News, On-chain (Koios)
-- AI analysis (free OpenRouter models)
-- Paper trading with SL/TP, stats, Telegram alerts (Thai)
-- **Trade memory + Hermes learning skill**
-- Hourly analysis runner
+- Multi-Timeframe signals + Support/Resistance
+- Paper trading พร้อม risk controls
+- Telegram alerts (ภาษาไทย)
+- **Multi-Agent via FastAPI**
+- Hermes learning skill
 
 ## Quick Start
 
@@ -18,36 +17,22 @@ git clone https://github.com/Gotji253/AI_trading_ADA.git
 cd AI_trading_ADA
 pip install -r requirements.txt
 cp .env.example .env
-# Add OPENROUTER_API_KEY + TELEGRAM keys if wanted
 ```
 
-## Learning from Trades (Hermes)
+## รันแบบ CLI (เดิม)
 
 ```bash
-# 1. Generate some paper trades
 python -m src.cli paper-auto
-
-# 2. Update memory
-python -m src.cli memory
-
-# 3. In Hermes
-/ada-learn
+python -m src.cli daily-summary
 ```
 
-Or generate a ready prompt:
-```bash
-python -m src.cli learn-prompt
-```
-
-See `docs/hermes-learning.md` and `skills/ada-learn/SKILL.md`.
-
-## Other Commands
+## รันแบบ Multi-Agent (FastAPI)
 
 ```bash
-python -m src.cli hourly
-python -m src.cli multi-tf
-python -m src.cli paper-status
+uvicorn src.api.main:app --reload --port 8000
 ```
+
+ดูรายละเอียดที่ `docs/multi-agent.md`
 
 ## Safety
 
