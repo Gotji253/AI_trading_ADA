@@ -9,6 +9,7 @@ Hermes Agent + **Multi-Agent** (Manager / Alpha / Risk / Execution) สำหร
 - Telegram alerts (ภาษาไทย)
 - **Multi-Agent via FastAPI**
 - Hermes learning skill
+- **Backtest & Walk-Forward Validation**
 
 ## Quick Start
 
@@ -32,7 +33,14 @@ python -m src.cli daily-summary
 uvicorn src.api.main:app --reload --port 8000
 ```
 
-ดูรายละเอียดที่ `docs/multi-agent.md`
+## รัน Backtest
+
+```bash
+python -m src.backtest.cli --mode simple --limit 500
+python -m src.backtest.cli --mode walkforward --limit 800
+```
+
+ดูรายละเอียดที่ `docs/backtest.md` และ `docs/multi-agent.md`
 
 ## Safety
 
