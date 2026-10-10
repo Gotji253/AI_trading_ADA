@@ -1,18 +1,15 @@
 # AI_trading_ADA
 
-Hermes Agent for **Cardano (ADA) only**
+Hermes Agent for **Cardano (ADA) only** with learning from paper trades.
 
 ## Features
 
-- Price + technical signals (RSI, EMA, MACD)
-- Multi-timeframe (15m / 1h / 4h)
-- **Support / Resistance** automatic levels
-- **News + simple sentiment** (free sources)
-- **Basic Cardano on-chain** via Koios (free, no key)
+- Technical signals + Multi-timeframe
+- Support/Resistance, News, On-chain (Koios)
 - AI analysis (free OpenRouter models)
-- Paper trading with SL/TP, stats, equity curve
-- **Trade memory** for AI learning
-- **Hourly analysis** runner (for cron / Hermes)
+- Paper trading with SL/TP, stats, Telegram alerts (Thai)
+- **Trade memory + Hermes learning skill**
+- Hourly analysis runner
 
 ## Quick Start
 
@@ -21,31 +18,35 @@ git clone https://github.com/Gotji253/AI_trading_ADA.git
 cd AI_trading_ADA
 pip install -r requirements.txt
 cp .env.example .env
-# Add OPENROUTER_API_KEY (and optional BINANCE keys)
+# Add OPENROUTER_API_KEY + TELEGRAM keys if wanted
 ```
 
-## Useful Commands
+## Learning from Trades (Hermes)
 
 ```bash
-python -m src.cli status
-python -m src.cli multi-tf
-python -m src.cli levels
-python -m src.cli news
-python -m src.cli onchain
-python -m src.cli memory
-python -m src.cli hourly          # full report
-python -m src.cli ai-analyze
-python -m src.cli paper-status
+# 1. Generate some paper trades
 python -m src.cli paper-auto
+
+# 2. Update memory
+python -m src.cli memory
+
+# 3. In Hermes
+/ada-learn
 ```
 
-## Hermes
+Or generate a ready prompt:
+```bash
+python -m src.cli learn-prompt
+```
 
-See `docs/hermes-integration.md` for cron, memory, and skill creation notes.
+See `docs/hermes-learning.md` and `skills/ada-learn/SKILL.md`.
+
+## Other Commands
 
 ```bash
-mkdir -p ~/.hermes/skills/finance
-cp -r skills/ada-trader ~/.hermes/skills/finance/
+python -m src.cli hourly
+python -m src.cli multi-tf
+python -m src.cli paper-status
 ```
 
 ## Safety

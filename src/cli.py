@@ -16,6 +16,7 @@ from src.analysis.levels import SupportResistance
 from src.data.news import NewsSentiment
 from src.data.onchain import CardanoOnChain
 from src.memory.trade_memory import TradeMemory
+from src.memory.learning_prompt import build_learning_prompt
 from src.scheduler.hourly import run_hourly_analysis
 
 
@@ -78,6 +79,10 @@ def cmd_memory(_args):
     print(json.dumps(result, ensure_ascii=False, indent=2))
 
 
+def cmd_learn_prompt(_args):
+    print(build_learning_prompt())
+
+
 def cmd_hourly(_args):
     result = run_hourly_analysis()
     print(json.dumps(result, ensure_ascii=False, indent=2))
@@ -127,14 +132,15 @@ def main():
 
     sub.add_parser("multi-tf").set_defaults(func=cmd_multi_tf)
 
-    p_levels = sub.add_parser("levels", help="Support / Resistance levels")
+    p_levels = sub.add_parser("levels")
     p_levels.add_argument("--interval", default="1h")
     p_levels.set_defaults(func=cmd_levels)
 
-    sub.add_parser("news", help="ADA news + simple sentiment").set_defaults(func=cmd_news)
-    sub.add_parser("onchain", help="Basic Cardano on-chain (Koios)").set_defaults(func=cmd_onchain)
-    sub.add_parser("memory", help="Update and show paper trade memory").set_defaults(func=cmd_memory)
-    sub.add_parser("hourly", help="Run full hourly analysis report").set_defaults(func=cmd_hourly)
+    sub.add_parser("news").set_defaults(func=cmd_news)
+    sub.add_parser("onchain").set_defaults(func=cmd_onchain)
+    sub.add_parser("memory").set_defaults(func=cmd_memory)
+    sub.add_parser("learn-prompt", help="Generate prompt for Hermes to learn from memory").set_defaults(func=cmd_learn_prompt)
+    sub.add_parser("hourly").set_defaults(func=cmd_hourly)
 
     p_ai = sub.add_parser("ai-analyze")
     p_ai.add_argument("--interval", default="1h")
