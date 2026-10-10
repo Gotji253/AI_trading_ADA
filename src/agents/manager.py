@@ -1,5 +1,6 @@
 """
 Manager_Agent — ประสานงาน Alpha → Risk → Execution
+รองรับ Emergency Stop
 """
 
 from typing import Dict, Any
@@ -14,9 +15,16 @@ class ManagerAgent:
         self.alpha = AlphaAgent()
         self.risk = RiskAgent()
         self.execution = ExecutionAgent()
+        self.trading_enabled = True
 
     def run_cycle(self) -> Dict[str, Any]:
-        """รันหนึ่งรอบการตัดสินใจแบบสมบูรณ์"""
+        if not self.trading_enabled:
+            return {
+                "cycle": "halted",
+                "message": "Trading is halted (emergency stop active)",
+                "status": self.execution.status(),
+            }
+
         # 1. Check existing exits first
         exit_result = self.execution.check_exits()
         if exit_result:
@@ -79,4 +87,26 @@ class ManagerAgent:
         }
 
     def get_status(self) -> Dict[str, Any]:
-        return self.execution.status()
+        status = self.execution.status()
+        status["trading_enabled"] = self.trading_enabled
+        return status
+
+    def emergency_stop(self) -> Dict[str, Any]:
+        """ปิดตำแหน่งทั้งหมดทันที แล้วหยุดการเทรดใหม่"""
+        self.trading_enabled = False
+        status = self.execution.status()
+        closed = None
+
+        if status.get("position"):
+            try:
+                price = status.get("current_price") or status["position"]["entry"]
+                closed = self.execution.close(price, reason="emergency_stop")
+            except Exception as e:
+                closed = {"error": str(e)}
+
+        return {
+            "status": "halted",
+            "trading_enabled": False,
+            "closed_position": closed,
+            "message": "Emergency stop activated. All positions closed. No new trades.",
+        }

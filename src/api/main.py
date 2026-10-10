@@ -9,8 +9,10 @@ from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 
 from src.agents.manager import ManagerAgent
+from src.memory.learning_prompt import build_learning_prompt
+from src.analysis.ai_analyzer import ADAAIAnalyzer
 
-app = FastAPI(title="AI_trading_ADA Multi-Agent", version="1.0.0")
+app = FastAPI(title="AI_trading_ADA Multi-Agent", version="1.1.0")
 manager = ManagerAgent()
 
 
@@ -39,3 +41,44 @@ def alpha_signal():
 @app.get("/risk")
 def risk_check(signal: str = "buy", price: float = 0.0):
     return manager.risk.evaluate(signal, price)
+
+
+@app.get("/performance/summary")
+def performance_summary():
+    """สรุปสถิติผลงาน paper trading"""
+    status = manager.get_status()
+    stats = status.get("stats", {})
+    return {
+        "equity": status.get("equity"),
+        "balance": status.get("balance_usdt"),
+        "daily_pnl": status.get("daily_pnl"),
+        "total_trades": status.get("total_trades"),
+        "open_position": status.get("position") is not None,
+        "stats": stats,
+    }
+
+
+@app.post("/learn/analyze")
+def learn_analyze():
+    """สร้าง prompt สำหรับการเรียนรู้ + ให้ AI วิเคราะห์ (ถ้ามี LLM key)"""
+    prompt = build_learning_prompt()
+    analyzer = ADAAIAnalyzer()
+    # ใช้ analyzer ที่มีอยู่แล้ว หรือคืนเฉพาะ prompt
+    try:
+        # สร้างบทวิเคราะห์สั้นๆ จากผลการเทรด
+        analysis = analyzer._call_llm(prompt) if hasattr(analyzer, "_call_llm") else prompt
+    except Exception as e:
+        analysis = f"LLM call failed: {e}\n\nPrompt:\n{prompt}"
+
+    return {
+        "status": "ok",
+        "learning_prompt": prompt,
+        "ai_suggestion": analysis,
+    }
+
+
+@app.post("/emergency/stop")
+def emergency_stop():
+    """ปิดตำแหน่งทั้งหมดทันที + หยุดการเทรดใหม่ชั่วคราว"""
+    result = manager.emergency_stop()
+    return JSONResponse(content=result)
