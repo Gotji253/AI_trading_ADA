@@ -3,14 +3,28 @@ CLI entry point for Hermes Agent ADA skill.
 Usage:
   python -m src.cli ada-signal --interval 1h
   python -m src.cli ada-price
+  python -m src.cli status
 """
 
 import argparse
 import json
 import sys
 
+from src.config import get_config
 from src.data.ada_price import ADAPriceFetcher
 from src.signals.ada_signals import ADASignalGenerator
+
+
+def cmd_status(_args):
+    cfg = get_config()
+    result = {
+        "status": "ok",
+        "config": cfg.summary(),
+        "message": "Ready for analysis. Trading mode is paper by default.",
+    }
+    if not cfg.has_binance_keys():
+        result["warning"] = "BINANCE_API_KEY / SECRET not set. Using public endpoints (rate-limited)."
+    print(json.dumps(result, ensure_ascii=False, indent=2))
 
 
 def cmd_price(args):
@@ -22,12 +36,16 @@ def cmd_price(args):
 def cmd_signal(args):
     gen = ADASignalGenerator(source=args.source)
     result = gen.generate(interval=args.interval)
+    # Attach config summary
+    result["trading_mode"] = get_config().TRADING_MODE
     print(json.dumps(result, ensure_ascii=False, indent=2))
 
 
 def main():
     parser = argparse.ArgumentParser(prog="ada-trader")
     sub = parser.add_subparsers(dest="command", required=True)
+
+    sub.add_parser("status", help="Check config and API key status").set_defaults(func=cmd_status)
 
     p_price = sub.add_parser("ada-price", help="Current ADA price snapshot")
     p_price.add_argument("--source", default="binance", choices=["binance", "coingecko"])
