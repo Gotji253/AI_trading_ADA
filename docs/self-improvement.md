@@ -1,49 +1,69 @@
-# Self-Improvement Engine Architecture
+# Self-Improvement Loop (4-Stage Quarantine Pipeline)
 
-## Continuous Feedback Cycle
+## วงจรที่ปลอดภัย
 
 ```
-Data Logging → Performance Attribution → Adaptive Optimization → Walk-Forward Validation → (Approve / Reject)
+1. Micro Data Logging
+        ↓
+2. Performance Attribution (Attribution_Agent)
+        ↓
+3. Adaptive Optimization (/learn/analyze)
+        ↓
+4. Walk-Forward Validation (Sharpe > 1.5, DD < 8%)
+        ↓
+   Approve → เสนอผ่าน Hermes / Telegram
+   Reject  → ไม่อัปเดต
 ```
 
-## 1. Data Logging (Micro)
+## Stage 1: Micro Data Logging
 
-- บันทึก snapshot ตลาดณ จังหวะเข้าเทรด
-- RSI, MACD, EMA, แนวรับ/ต้าน, Multi-TF agreement, sentiment
-- เหตุผลของ Alpha และข้อจำกัดของ Risk
-- ไฟล์: `data/trade_logs.jsonl`
+บันทึกรายละเอียดตอนเข้า/ปิดตำแหน่ง:
+- Indicators (RSI, MACD, EMA)
+- Volatility (ATR โดยประมาณ)
+- Slippage (โดยประมาณ)
+- Filter rules ที่ผ่าน
+- Regime ณ ขณะเข้า
 
-## 2. Performance Attribution
+ไฟล์: `data/trade_logs.jsonl`
 
-จัดประเภทการแพ่/ชนะ:
-- `false_breakout`
-- `ranging_chop`
-- `trend_reversal`
-- `high_volatility_slippage`
-- `good_trend_follow`
+## Stage 2: Performance Attribution
 
-## 3. Adaptive Optimization
+**Attribution_Agent** จัดประเภท:
+- Win — Trend Following Accuracy
+- Loss — False Breakout
+- Loss — High Slippage
+- Loss — Unexpected News Volatility
+- Loss — Ranging Chop
 
-- AI วิเคราะห์ Trade Memory + Attribution
-- เสนอปรับ RSI threshold, SR proximity, agreement strictness ฯลฯ
-- คืนเป็น JSON suggestion
+## Stage 3: Adaptive Optimization
 
-## 4. Walk-Forward Validation Gate
+- เรียก `POST /learn/analyze`
+- AI วิเคราะห์แล้วเสนอปรับพารามิเตอร์
+- ตัวอย่าง: เพิ่มระยะ SL ถ้าถูก Whipsaw บ่อย, ปรับ agreement threshold ฯลฯ
 
-- พารามิเตอร์ใหม่ต้องผ่าน backtest สั้นๆ ก่อนอนุมัติ
-- ถ้าไม่ผ่าน → ไม่อัปเดตไปใช้จริง
+## Stage 4: Walk-Forward Validation
+
+เกณฑ์การอนุมัติ:
+- Sharpe Ratio > **1.5**
+- Max Drawdown < **8%**
+- Return เป็นบวก
+
+หากไม่ผ่าน → ไม่อัปเดตค่า
+
+หากผ่าน → ส่งเสนอผ่าน Hermes หรือ Telegram ให้ผู้ใช้ตัดสินใจ
 
 ## การใช้งาน
 
 ```bash
-# รันวงจรเต็ม
+# รันวงจรเต็ม (4 stages)
 python -m src.memory.self_improve
 
-# หรือผ่าน API
+# ผ่าน API
 curl -X POST http://localhost:8000/learn/analyze
 ```
 
 ## ความปลอดภัย
 
-- พารามิเตอร์ใหม่จะไม่ถูกใช้จนกว่าจะผ่าน validation
-- ยังเป็น Paper mode เท่านั้น
+- พารามิเตอร์ใหม่จะไม่ถูกใช้จนกว่าจะผ่าน Stage 4
+- ยังเป็น Paper mode
+- ผล validation ถูกบันทึกไว้ใน response

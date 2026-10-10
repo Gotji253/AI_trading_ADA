@@ -1,6 +1,5 @@
 """
-Self-Improvement Engine — orchestrates the full feedback cycle.
-รวม Attribution_Agent
+Self-Improvement Engine — 4-Stage Quarantine Pipeline
 """
 
 from typing import Dict, Any
@@ -20,32 +19,38 @@ class SelfImprovementEngine:
 
     def run_cycle(self) -> Dict[str, Any]:
         """
-        Full cycle:
-        1. Update memory
-        2. Attribution analysis
-        3. Generate suggestions (Adaptive Optimization)
-        4. Validate with short backtest
+        4-Stage Pipeline:
+        1. Memory / Logging refresh
+        2. Attribution
+        3. Optimization suggestion
+        4. Walk-Forward Validation
         """
+        # Stage 1: Refresh memory
         mem = self.memory.update_from_paper()
 
-        # Attribution matrix
+        # Stage 2: Attribution
         attr_result = self.attribution.analyze()
 
-        # Optimize
+        # Stage 3: Optimization
         opt = self.optimizer.suggest()
 
-        # Validate
+        # Stage 4: Validation
         proposed = opt.get("parsed_suggestion", {})
         validation = self.validator.validate(proposed)
 
         return {
             "status": "ok",
+            "stage": "complete",
             "memory_updated": True,
             "attribution": attr_result,
             "optimization": opt,
             "validation": validation,
             "ready_to_apply": validation.get("approved", False),
-            "message": "Review validation and attribution before applying changes.",
+            "message": (
+                "Parameter changes approved. Review and apply manually."
+                if validation.get("approved")
+                else "Parameter changes rejected by validation. No update applied."
+            ),
         }
 
 
