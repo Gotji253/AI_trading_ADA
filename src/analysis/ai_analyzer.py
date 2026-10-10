@@ -1,6 +1,6 @@
 """
 AI Analysis for ADA.
-Uses free OpenRouter model by default; model can be switched via config or argument.
+Supports single timeframe or multi-timeframe summary.
 """
 
 import json
@@ -10,12 +10,14 @@ import requests
 
 from src.config import get_config
 from src.signals.ada_signals import ADASignalGenerator
+from src.signals.multi_tf import MultiTimeframeAnalyzer
 
 
 class ADAAIAnalyzer:
     def __init__(self, model: Optional[str] = None):
         self.cfg = get_config()
         self.signal_gen = ADASignalGenerator()
+        self.multi = MultiTimeframeAnalyzer()
         self.model = model or self.cfg.OPENROUTER_MODEL
 
     def _call_llm(self, prompt: str) -> str:
@@ -36,7 +38,7 @@ class ADAAIAnalyzer:
         payload = {
             "model": self.model,
             "messages": [{"role": "user", "content": prompt}],
-            "max_tokens": 800,
+            "max_tokens": 900,
         }
         r = requests.post(url, headers=headers, json=payload, timeout=90)
         r.raise_for_status()
@@ -51,27 +53,34 @@ class ADAAIAnalyzer:
         payload = {
             "model": "gpt-4o-mini",
             "messages": [{"role": "user", "content": prompt}],
-            "max_tokens": 800,
+            "max_tokens": 900,
         }
         r = requests.post(url, headers=headers, json=payload, timeout=60)
         r.raise_for_status()
         return r.json()["choices"][0]["message"]["content"]
 
-    def analyze(self, interval: str = "1h") -> Dict[str, Any]:
-        sig = self.signal_gen.generate(interval=interval)
-        if sig.get("status") != "ok":
-            return sig
+    def analyze(self, interval: str = "1h", multi: bool = False) -> Dict[str, Any]:
+        if multi:
+            data = self.multi.analyze()
+            prompt_data = data
+        else:
+            data = self.signal_gen.generate(interval=interval)
+            prompt_data = data
+
+        if data.get("status") != "ok":
+            return data
 
         prompt = f"""You are a professional crypto analyst focused only on Cardano (ADA).
 
-Current technical data:
-{json.dumps(sig, indent=2, ensure_ascii=False)}
+Data:
+{json.dumps(prompt_data, indent=2, ensure_ascii=False)}
 
-Provide a concise analysis in Thai with these sections:
-1. สรุปสถานะการณ์ทางเทคนิค (2-3 ประโยค)
-2. ทัศนคติเชิงสัญญาณ (buy/sell/hold) พร้อมเหตุผลสั้นๆ
-3. ระดับความเสี่ยงและโอกาสสั้นๆ
-4. แนะนำสำหรับนักเทรดระยะสั้น (1-2 ประโยค)
+Provide a concise analysis in Thai:
+1. สรุปสถานะการณ์ (2-3 ประโยค)
+2. Timeframe ไหนแข็งแกร่งที่สุดและเหตุผล (ถ้าเป็น multi-tf)
+3. ทัศนคติเชิงสัญญาณ (buy/sell/hold) พร้อมเหตุผล
+4. ระดับความเสี่ยงและโอกาส
+5. แนะนำสำหรับนักเทรดระยะสั้น
 
 เป็นการวิเคราะห์เท่านั้น ไม่ใช่คำแนะนำทางการเงิน"""
 
@@ -80,9 +89,8 @@ Provide a concise analysis in Thai with these sections:
         return {
             "status": "ok",
             "symbol": "ADA",
-            "interval": interval,
             "model_used": self.model,
-            "technical": sig,
+            "data": data,
             "ai_analysis": ai_text,
             "trading_mode": self.cfg.TRADING_MODE,
         }
@@ -90,7 +98,7 @@ Provide a concise analysis in Thai with these sections:
 
 def main():
     analyzer = ADAAIAnalyzer()
-    result = analyzer.analyze("1h")
+    result = analyzer.analyze("1h", multi=True)
     print(json.dumps(result, ensure_ascii=False, indent=2))
 
 
