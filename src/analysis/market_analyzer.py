@@ -1,8 +1,6 @@
 """
 3-Dimension Market Analysis for ADA
-1. Technical (Multi-TF: 4h Macro, 1h Structure, 15m Trigger)
-2. On-Chain (Koios)
-3. Sentiment & News
+Enhanced with pullback-to-support + rejection logic for bullish regime.
 """
 
 from typing import Dict, Any
@@ -23,16 +21,35 @@ class MarketAnalyzer:
         self.regime = RegimeAgent()
 
     def analyze(self) -> Dict[str, Any]:
-        """Full 3-dimension analysis."""
-        # 1. Technical Multi-TF
         multi = self.multi.analyze()
         levels = self.levels.find_levels(interval="1h")
         regime = self.regime.classify()
 
-        # Extract TF-specific views
         tf_4h = multi.get("timeframes", {}).get("4h", {})
         tf_1h = multi.get("timeframes", {}).get("1h", {})
         tf_15m = multi.get("timeframes", {}).get("15m", {})
+
+        price = levels.get("current_price") or tf_1h.get("price")
+        nearest_sup = levels.get("nearest_support")
+
+        # Enhanced signal logic for bullish pullback setup
+        recommendation = "hold"
+        setup_quality = "none"
+
+        is_bullish_regime = regime.get("regime") in ("trending_bull",)
+        near_support = False
+        if price and nearest_sup:
+            near_support = abs(price - nearest_sup) / nearest_sup * 100 <= 1.5
+
+        rsi_15m = tf_15m.get("rsi", 50)
+        rsi_1h = tf_1h.get("rsi", 50)
+
+        if is_bullish_regime and near_support and rsi_15m < 40 and rsi_1h < 55:
+            recommendation = "buy"
+            setup_quality = "high"  # Pullback + rejection zone + oversold micro
+        elif multi.get("recommendation") in ("buy", "sell"):
+            recommendation = multi.get("recommendation")
+            setup_quality = "medium"
 
         technical = {
             "macro_4h": {
@@ -44,29 +61,27 @@ class MarketAnalyzer:
             },
             "structure_1h": {
                 "signal": tf_1h.get("signal"),
-                "rsi": tf_1h.get("rsi"),
+                "rsi": rsi_1h,
                 "macd_hist": tf_1h.get("macd_hist"),
+                "near_support": near_support,
             },
             "trigger_15m": {
                 "signal": tf_15m.get("signal"),
-                "rsi": tf_15m.get("rsi"),
+                "rsi": rsi_15m,
             },
             "levels": levels,
             "regime": regime,
+            "setup_quality": setup_quality,
             "consensus": multi.get("recommendation"),
             "agreement": multi.get("agreement"),
         }
 
-        # 2. On-Chain
         tip = self.onchain.get_tip()
-        epoch = self.onchain.get_epoch_info()
         onchain = {
             "tip": tip,
-            "epoch": epoch,
             "health": "stable" if tip.get("status") == "ok" else "unknown",
         }
 
-        # 3. Sentiment
         news = self.news.get_ada_news()
         sentiment = "neutral"
         if news.get("articles"):
@@ -75,10 +90,8 @@ class MarketAnalyzer:
         sentiment_data = {
             "score": sentiment,
             "articles_count": len(news.get("articles", [])),
-            "source": news.get("source", "fallback"),
         }
 
-        # Overall bias
         overall = self._overall_bias(technical, onchain, sentiment_data)
 
         return {
@@ -87,33 +100,29 @@ class MarketAnalyzer:
             "onchain": onchain,
             "sentiment": sentiment_data,
             "overall_bias": overall,
-            "recommendation": multi.get("recommendation", "hold"),
+            "recommendation": recommendation,
+            "setup_quality": setup_quality,
         }
 
     def _overall_bias(self, tech: Dict, onchain: Dict, sentiment: Dict) -> str:
         score = 0
-        # Technical weight
         if tech.get("macro_4h", {}).get("bias") == "bullish":
             score += 2
         elif tech.get("macro_4h", {}).get("bias") == "bearish":
             score -= 2
 
-        if tech.get("consensus") == "buy":
-            score += 1
-        elif tech.get("consensus") == "sell":
-            score -= 1
+        if tech.get("setup_quality") == "high":
+            score += 1.5
 
-        # Sentiment
         if sentiment.get("score") == "positive":
             score += 1
         elif sentiment.get("score") == "negative":
             score -= 1
 
-        # On-chain health (soft)
         if onchain.get("health") == "stable":
             score += 0.5
 
-        if score >= 2:
+        if score >= 2.5:
             return "bullish"
         elif score <= -2:
             return "bearish"
