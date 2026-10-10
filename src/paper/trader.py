@@ -1,9 +1,9 @@
 """
 Paper Trading Simulator for ADA (improved).
 - Auto close on Stop-Loss / Take-Profit
-- Equity curve + performance stats (win rate, profit factor, max drawdown)
-- Daily trade limit + risk-based position sizing
-No real orders.
+- Equity curve + performance stats
+- Daily trade limit + risk-based sizing
+- Optional Telegram notification on open/close
 """
 
 import json
@@ -15,6 +15,7 @@ from typing import Optional, Dict, Any, List
 from src.config import get_config
 from src.signals.ada_signals import ADASignalGenerator
 from src.data.ada_price import ADAPriceFetcher
+from src.notify.telegram import TelegramNotifier
 
 
 DATA_DIR = Path(__file__).resolve().parent.parent.parent / "data"
@@ -22,10 +23,11 @@ STATE_FILE = DATA_DIR / "paper_state.json"
 
 
 class PaperTrader:
-    def __init__(self, initial_balance: float = 10000.0):
+    def __init__(self, initial_balance: float = 10000.0, notify: bool = True):
         self.initial_balance = initial_balance
         self.state = self._load_state()
         self.fetcher = ADAPriceFetcher()
+        self.notifier = TelegramNotifier() if notify else None
 
     def _load_state(self) -> Dict[str, Any]:
         DATA_DIR.mkdir(parents=True, exist_ok=True)
@@ -52,6 +54,10 @@ class PaperTrader:
     def _trades_today(self) -> int:
         return self.state.get("daily_trades", {}).get(self._today_key(), 0)
 
+    def _notify(self, text: str):
+        if self.notifier and self.notifier.enabled:
+            self.notifier.send(text)
+
     def _record_equity(self):
         equity = self.state["balance_usdt"]
         pos = self.state.get("position")
@@ -68,7 +74,6 @@ class PaperTrader:
             "ts": datetime.now(timezone.utc).isoformat(),
             "equity": round(equity, 2),
         })
-        # keep last 500 points
         self.state["equity_curve"] = self.state["equity_curve"][-500:]
 
     def status(self) -> Dict[str, Any]:
@@ -110,7 +115,6 @@ class PaperTrader:
         gross_loss = abs(sum(losses)) if losses else 0
         profit_factor = round(gross_profit / gross_loss, 2) if gross_loss > 0 else float("inf") if gross_profit > 0 else 0
 
-        # Max drawdown from equity curve
         curve = [e["equity"] for e in self.state.get("equity_curve", [])]
         max_dd = 0.0
         peak = curve[0] if curve else self.initial_balance
@@ -132,7 +136,6 @@ class PaperTrader:
         }
 
     def check_sl_tp(self) -> Optional[Dict[str, Any]]:
-        """Check if open position hit SL or TP and close if so."""
         pos = self.state.get("position")
         if not pos or not pos.get("stop_loss") or not pos.get("take_profit"):
             return None
@@ -153,7 +156,7 @@ class PaperTrader:
                 hit, reason = True, "stop_loss"
             elif price >= tp:
                 hit, reason = True, "take_profit"
-        else:  # short
+        else:
             if price >= sl:
                 hit, reason = True, "stop_loss"
             elif price <= tp:
@@ -184,7 +187,6 @@ class PaperTrader:
         risk = risk_pct if risk_pct is not None else cfg.MAX_POSITION_PCT
         risk_amount = self.state["balance_usdt"] * (risk / 100.0)
 
-        # Position size based on risk to SL if available
         if stop_loss and abs(price - stop_loss) > 0:
             risk_per_unit = abs(price - stop_loss)
             qty = risk_amount / risk_per_unit
@@ -195,7 +197,7 @@ class PaperTrader:
             return {"status": "error", "message": "Invalid quantity"}
 
         cost = qty * price
-        if cost > self.state["balance_usdt"] * 0.95:  # leave some buffer
+        if cost > self.state["balance_usdt"] * 0.95:
             qty = (self.state["balance_usdt"] * 0.95) / price
             cost = qty * price
 
@@ -211,6 +213,15 @@ class PaperTrader:
         self.state.setdefault("daily_trades", {})[self._today_key()] = self._trades_today() + 1
         self._record_equity()
         self._save_state()
+
+        msg = (
+            f"PAPER OPEN {side.upper()}\n"
+            f"Entry: {price}\n"
+            f"Qty: {round(qty, 4)}\n"
+            f"SL: {stop_loss} | TP: {take_profit}"
+        )
+        self._notify(msg)
+
         return {
             "status": "ok",
             "action": "open",
@@ -237,7 +248,6 @@ class PaperTrader:
         else:
             pnl = (entry - price) * qty
 
-        # Return the locked capital + pnl
         self.state["balance_usdt"] += qty * entry + pnl
 
         trade = {
@@ -256,6 +266,13 @@ class PaperTrader:
         self._record_equity()
         self._save_state()
 
+        msg = (
+            f"PAPER CLOSE {side.upper()}\n"
+            f"Exit: {price} | Reason: {reason}\n"
+            f"PnL: {trade['pnl']} USDT ({trade['pnl_pct']}%)"
+        )
+        self._notify(msg)
+
         return {
             "status": "ok",
             "action": "close",
@@ -267,7 +284,6 @@ class PaperTrader:
         }
 
     def auto_trade(self, interval: str = "1h") -> Dict[str, Any]:
-        """Check SL/TP first, then generate signal and act."""
         sl_tp_result = self.check_sl_tp()
         if sl_tp_result:
             return {"sl_tp_triggered": sl_tp_result, "paper_status": self.status()}

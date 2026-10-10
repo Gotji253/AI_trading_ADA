@@ -1,6 +1,6 @@
 """
 Hourly analysis runner (for cron or Hermes scheduler).
-Generates multi-tf + levels + news + on-chain summary and optionally updates memory.
+Sends Telegram alert if configured.
 """
 
 import json
@@ -11,9 +11,10 @@ from src.analysis.levels import SupportResistance
 from src.data.news import NewsSentiment
 from src.data.onchain import CardanoOnChain
 from src.memory.trade_memory import TradeMemory
+from src.notify.telegram import TelegramNotifier
 
 
-def run_hourly_analysis() -> dict:
+def run_hourly_analysis(send_telegram: bool = True) -> dict:
     result = {
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "multi_tf": MultiTimeframeAnalyzer().analyze(),
@@ -22,16 +23,30 @@ def run_hourly_analysis() -> dict:
         "onchain": CardanoOnChain().get_tip(),
     }
 
-    # Update trade memory
     try:
         result["memory"] = TradeMemory().update_from_paper()
     except Exception as e:
         result["memory_error"] = str(e)
 
-    # Simple alert message
     consensus = result["multi_tf"].get("consensus", "hold")
     strength = result["multi_tf"].get("consensus_strength", 0)
-    result["alert"] = f"ADA hourly: consensus={consensus} (strength {strength}). Check full report."
+    strongest = result["multi_tf"].get("strongest_timeframe", "-")
+    nearest_sup = result["levels"].get("nearest_support")
+    nearest_res = result["levels"].get("nearest_resistance")
+
+    alert_text = (
+        f"ADA Hourly Report\n"
+        f"Consensus: {consensus.upper()} (strength {strength})\n"
+        f"Strongest TF: {strongest}\n"
+        f"Support: {nearest_sup} | Resistance: {nearest_res}\n"
+        f"Time: {result['timestamp']}"
+    )
+    result["alert"] = alert_text
+
+    if send_telegram:
+        notifier = TelegramNotifier()
+        sent = notifier.send(alert_text)
+        result["telegram_sent"] = sent
 
     return result
 
