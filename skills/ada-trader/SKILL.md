@@ -1,40 +1,73 @@
-# ADA Trader Skill (Hermes)
+---
+name: ada-trader
+description: Analyze Cardano (ADA) only and generate buy/sell/hold signals with RSI, EMA, MACD, stop-loss and take-profit. Use when the user asks about ADA price, trading signal, or analysis.
+version: 1.0.0
+author: AI_trading_ADA
+license: MIT
+platforms: [linux, macos, windows]
+metadata:
+  hermes:
+    tags: [ADA, Cardano, Trading, Crypto, Signals]
+    category: finance
+    requires_toolsets: [terminal]
+---
 
-Specialized skill for Hermes Agent — **ADA only**.
+# ADA Trader Skill
 
-## Trigger
+Specialized for **ADA (Cardano) only**. Never analyze or trade other coins.
 
-`/ada-trader` or natural language about ADA trading / analysis.
+## When to Use
 
-## How to use in Hermes
+- User asks for ADA price, analysis, signal, buy/sell recommendation
+- User wants current market view or technical levels for ADA
 
-1. Copy `src/` into your Hermes workspace or add it to PYTHONPATH.
-2. The skill should call the Python modules below.
+## Prerequisites
 
-## Recommended implementation (for Hermes tool / skill)
+The project root (this repo) must be on the machine and Python dependencies installed:
 
-```python
-from src.signals.ada_signals import ADASignalGenerator
-
-gen = ADASignalGenerator(source="binance")
-result = gen.generate(interval="1h")
-# Return result as JSON + Thai summary
+```bash
+pip install -r requirements.txt
 ```
 
-## Output fields
+## How to Run
 
-- `signal`: buy | sell | hold
-- `confidence`: 0.0 – 1.0
-- `price`, `rsi`, `ema20`, `ema50`
-- `stop_loss`, `take_profit`
-- `reasons`: list of why the signal was generated
+Use the `terminal` tool to run the CLI from the repo root:
+
+```bash
+python -m src.cli ada-signal --interval 1h
+```
+
+Optional flags:
+- `--interval 15m|1h|4h|1d`
+- `--source binance|coingecko`
+
+## Procedure
+
+1. Run the command above with `terminal`.
+2. Parse the JSON output.
+3. Present a short Thai summary + the key numbers (price, signal, confidence, RSI, stop-loss, take-profit).
+4. Always remind that this is analysis / paper only — no live orders without explicit confirmation.
+
+## Output Example
+
+The CLI returns JSON like:
+
+```json
+{
+  "status": "ok",
+  "symbol": "ADA",
+  "signal": "buy",
+  "confidence": 0.6,
+  "price": 0.452,
+  "rsi": 28.4,
+  "stop_loss": 0.43,
+  "take_profit": 0.48,
+  "reasons": ["RSI oversold"]
+}
+```
 
 ## Safety
 
-- ADA only. Refuse other coins.
-- Paper / dry-run by default.
-- Require explicit user confirmation before any live order.
-
-## Example Thai summary
-
-"ADA ปัจจุบันราคา X USDT, RSI Y, สัญญาณ: ซื้อ/ขาย/ถือ (ความมั่นใจ Z%)"
+- ADA only. Refuse other assets.
+- Default is analysis / paper. Never place live orders unless the user explicitly confirms.
+- If data fetch fails, report the error clearly.
