@@ -13,7 +13,13 @@ mkdir -p ~/.hermes/skills/finance
 cp -r skills/ada-api ~/.hermes/skills/finance/
 ```
 
-## 3. ใช้งานใน Hermes
+## 3. (แนะนำ) ตั้ง Base URL
+
+```bash
+export ADA_API_BASE=http://localhost:8000
+```
+
+## 4. ใช้งานใน Hermes
 
 ```
 /ada-api
@@ -26,21 +32,34 @@ cp -r skills/ada-api ~/.hermes/skills/finance/
 สรุปผลงาน
 
 /ada-api
+ประวัติการเทรด
+
+/ada-api
+สรุปประจำวัน
+
+/ada-api
 emergency stop
+
+/ada-api
+resume
 ```
 
-## Endpoints สำคัญ
+## Endpoints ทั้งหมด
 
-| Endpoint | คำอธิบาย |
-|----------|----------|
-| `GET /status` | สถานะบัญชี |
-| `POST /cycle` | รันรอบตัดสินใจ |
-| `GET /performance/summary` | สถิติผลงาน |
-| `POST /learn/analyze` | วิเคราะห์ + แนะนำการปรับปรุง |
-| `POST /emergency/stop` | ปิดทุกตำแหน่ง + หยุดเทรด |
+| Method | Path | คำอธิบาย |
+|--------|------|----------|
+| GET | `/status` | สถานะบัญชี + trading_enabled |
+| POST | `/cycle` | รันรอบตัดสินใจ (Alpha → Risk → Execution) |
+| GET | `/performance/summary` | สถิติผลงาน |
+| GET | `/history?limit=20` | ประวัติการเทรด |
+| POST | `/daily-summary` | ส่งสรุปประจำวันไป Telegram |
+| POST | `/learn/analyze` | วิเคราะห์ + แนะนำการปรับปรุง |
+| POST | `/emergency/stop` | ปิดทุกตำแหน่ง + หยุดเทรด |
+| POST | `/emergency/resume` | เปิดการเทรดใหม่ |
 
 ## หมายเหตุ
 
 - Hermes เป็น Voice/Chat Interface
 - FastAPI เป็นตัวประมวลผลการทำงานจริง
 - แยกบทบาทชัดเจน (Alpha / Risk / Execution)
+- มี Kill Switch + Resume

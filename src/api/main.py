@@ -5,20 +5,21 @@ Run:
   uvicorn src.api.main:app --reload --port 8000
 """
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Query
 from fastapi.responses import JSONResponse
 
 from src.agents.manager import ManagerAgent
 from src.memory.learning_prompt import build_learning_prompt
 from src.analysis.ai_analyzer import ADAAIAnalyzer
+from src.paper.trader import PaperTrader
 
-app = FastAPI(title="AI_trading_ADA Multi-Agent", version="1.1.0")
+app = FastAPI(title="AI_trading_ADA Multi-Agent", version="1.2.0")
 manager = ManagerAgent()
 
 
 @app.get("/")
 def root():
-    return {"message": "AI_trading_ADA Multi-Agent API", "status": "running"}
+    return {"message": "AI_trading_ADA Multi-Agent API", "status": "running", "trading_enabled": manager.trading_enabled}
 
 
 @app.get("/status")
@@ -39,7 +40,7 @@ def alpha_signal():
 
 
 @app.get("/risk")
-def risk_check(signal: str = "buy", price: float = 0.0):
+def risk_check(signal: str = Query("buy"), price: float = Query(0.0)):
     return manager.risk.evaluate(signal, price)
 
 
@@ -54,8 +55,24 @@ def performance_summary():
         "daily_pnl": status.get("daily_pnl"),
         "total_trades": status.get("total_trades"),
         "open_position": status.get("position") is not None,
+        "trading_enabled": status.get("trading_enabled", True),
         "stats": stats,
     }
+
+
+@app.get("/history")
+def trade_history(limit: int = Query(20, ge=1, le=100)):
+    """ประวัติการเทรดล่าสุด"""
+    trader = PaperTrader(notify=False)
+    return {"trades": trader.history(limit=limit)}
+
+
+@app.post("/daily-summary")
+def daily_summary():
+    """ส่งสรุปประจำวันไป Telegram (ถ้าตั้งค่าไว้)"""
+    trader = PaperTrader(notify=True)
+    result = trader.daily_summary(send_telegram=True)
+    return result
 
 
 @app.post("/learn/analyze")
@@ -63,9 +80,7 @@ def learn_analyze():
     """สร้าง prompt สำหรับการเรียนรู้ + ให้ AI วิเคราะห์ (ถ้ามี LLM key)"""
     prompt = build_learning_prompt()
     analyzer = ADAAIAnalyzer()
-    # ใช้ analyzer ที่มีอยู่แล้ว หรือคืนเฉพาะ prompt
     try:
-        # สร้างบทวิเคราะห์สั้นๆ จากผลการเทรด
         analysis = analyzer._call_llm(prompt) if hasattr(analyzer, "_call_llm") else prompt
     except Exception as e:
         analysis = f"LLM call failed: {e}\n\nPrompt:\n{prompt}"
@@ -82,3 +97,14 @@ def emergency_stop():
     """ปิดตำแหน่งทั้งหมดทันที + หยุดการเทรดใหม่ชั่วคราว"""
     result = manager.emergency_stop()
     return JSONResponse(content=result)
+
+
+@app.post("/emergency/resume")
+def emergency_resume():
+    """เปิดการเทรดใหม่หลัง emergency stop"""
+    manager.trading_enabled = True
+    return {
+        "status": "resumed",
+        "trading_enabled": True,
+        "message": "Trading has been re-enabled. New cycles can run again.",
+    }
