@@ -115,6 +115,12 @@ def cmd_paper_stats(_args):
     print(json.dumps(trader.performance_stats(), ensure_ascii=False, indent=2))
 
 
+def cmd_daily_summary(_args):
+    trader = PaperTrader()
+    result = trader.daily_summary(send_telegram=True)
+    print(json.dumps(result, ensure_ascii=False, indent=2))
+
+
 def main():
     parser = argparse.ArgumentParser(prog="ada-trader")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -139,7 +145,7 @@ def main():
     sub.add_parser("news").set_defaults(func=cmd_news)
     sub.add_parser("onchain").set_defaults(func=cmd_onchain)
     sub.add_parser("memory").set_defaults(func=cmd_memory)
-    sub.add_parser("learn-prompt", help="Generate prompt for Hermes to learn from memory").set_defaults(func=cmd_learn_prompt)
+    sub.add_parser("learn-prompt").set_defaults(func=cmd_learn_prompt)
     sub.add_parser("hourly").set_defaults(func=cmd_hourly)
 
     p_ai = sub.add_parser("ai-analyze")
@@ -149,6 +155,7 @@ def main():
 
     sub.add_parser("paper-status").set_defaults(func=cmd_paper_status)
     sub.add_parser("paper-stats").set_defaults(func=cmd_paper_stats)
+    sub.add_parser("daily-summary", help="Send daily summary to Telegram").set_defaults(func=cmd_daily_summary)
 
     p_auto = sub.add_parser("paper-auto")
     p_auto.add_argument("--interval", default="1h")
