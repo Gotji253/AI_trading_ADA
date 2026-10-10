@@ -1,6 +1,6 @@
 """
 Manager_Agent — ประสานงาน Alpha → Risk → Execution
-รองรับ Emergency Stop
+รองรับ Emergency Stop และ Max Drawdown Hard Stop
 """
 
 from typing import Dict, Any
@@ -16,12 +16,14 @@ class ManagerAgent:
         self.risk = RiskAgent()
         self.execution = ExecutionAgent()
         self.trading_enabled = True
+        self.quarantine_mode = False
 
     def run_cycle(self) -> Dict[str, Any]:
-        if not self.trading_enabled:
+        if not self.trading_enabled or self.quarantine_mode:
             return {
                 "cycle": "halted",
-                "message": "Trading is halted (emergency stop active)",
+                "message": "Trading is halted (emergency / quarantine mode)",
+                "quarantine": self.quarantine_mode,
                 "status": self.execution.status(),
             }
 
@@ -50,6 +52,16 @@ class ManagerAgent:
         sig_1h = alpha_out.get("multi_tf", {}).get("timeframes", {}).get("1h", {})
         proposed_sl = sig_1h.get("stop_loss")
         risk_out = self.risk.evaluate(signal, price, proposed_sl)
+
+        # Hard stop triggered by max drawdown
+        if risk_out.get("hard_stop"):
+            stop_result = self.emergency_stop(reason="max_drawdown")
+            return {
+                "cycle": "quarantine",
+                "reason": risk_out.get("reason"),
+                "emergency": stop_result,
+                "status": self.execution.status(),
+            }
 
         if not risk_out.get("approved"):
             return {
@@ -89,24 +101,39 @@ class ManagerAgent:
     def get_status(self) -> Dict[str, Any]:
         status = self.execution.status()
         status["trading_enabled"] = self.trading_enabled
+        status["quarantine_mode"] = self.quarantine_mode
         return status
 
-    def emergency_stop(self) -> Dict[str, Any]:
-        """ปิดตำแหน่งทั้งหมดทันที แล้วหยุดการเทรดใหม่"""
+    def emergency_stop(self, reason: str = "manual") -> Dict[str, Any]:
+        """ปิดตำแหน่งทั้งหมดทันที แล้วหยุดการเทรดใหม่ (เข้าโหมดกักกัน)"""
         self.trading_enabled = False
+        self.quarantine_mode = True
         status = self.execution.status()
         closed = None
 
         if status.get("position"):
             try:
                 price = status.get("current_price") or status["position"]["entry"]
-                closed = self.execution.close(price, reason="emergency_stop")
+                closed = self.execution.close(price, reason=f"emergency_stop:{reason}")
             except Exception as e:
                 closed = {"error": str(e)}
 
         return {
-            "status": "halted",
+            "status": "quarantine",
             "trading_enabled": False,
+            "quarantine_mode": True,
+            "reason": reason,
             "closed_position": closed,
-            "message": "Emergency stop activated. All positions closed. No new trades.",
+            "message": f"Emergency stop activated ({reason}). All positions closed. System in quarantine mode.",
+        }
+
+    def resume(self) -> Dict[str, Any]:
+        """เปิดการเทรดใหม่หลัง quarantine (ต้องทำด้วยมือ)"""
+        self.trading_enabled = True
+        self.quarantine_mode = False
+        return {
+            "status": "resumed",
+            "trading_enabled": True,
+            "quarantine_mode": False,
+            "message": "Trading re-enabled. Quarantine cleared.",
         }

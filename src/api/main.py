@@ -13,13 +13,18 @@ from src.memory.learning_prompt import build_learning_prompt
 from src.analysis.ai_analyzer import ADAAIAnalyzer
 from src.paper.trader import PaperTrader
 
-app = FastAPI(title="AI_trading_ADA Multi-Agent", version="1.2.0")
+app = FastAPI(title="AI_trading_ADA Multi-Agent", version="1.3.0")
 manager = ManagerAgent()
 
 
 @app.get("/")
 def root():
-    return {"message": "AI_trading_ADA Multi-Agent API", "status": "running", "trading_enabled": manager.trading_enabled}
+    return {
+        "message": "AI_trading_ADA Multi-Agent API",
+        "status": "running",
+        "trading_enabled": manager.trading_enabled,
+        "quarantine": manager.quarantine_mode,
+    }
 
 
 @app.get("/status")
@@ -46,7 +51,6 @@ def risk_check(signal: str = Query("buy"), price: float = Query(0.0)):
 
 @app.get("/performance/summary")
 def performance_summary():
-    """สรุปสถิติผลงาน paper trading"""
     status = manager.get_status()
     stats = status.get("stats", {})
     return {
@@ -56,20 +60,19 @@ def performance_summary():
         "total_trades": status.get("total_trades"),
         "open_position": status.get("position") is not None,
         "trading_enabled": status.get("trading_enabled", True),
+        "quarantine_mode": status.get("quarantine_mode", False),
         "stats": stats,
     }
 
 
 @app.get("/history")
 def trade_history(limit: int = Query(20, ge=1, le=100)):
-    """ประวัติการเทรดล่าสุด"""
     trader = PaperTrader(notify=False)
     return {"trades": trader.history(limit=limit)}
 
 
 @app.post("/daily-summary")
 def daily_summary():
-    """ส่งสรุปประจำวันไป Telegram (ถ้าตั้งค่าไว้)"""
     trader = PaperTrader(notify=True)
     result = trader.daily_summary(send_telegram=True)
     return result
@@ -77,7 +80,6 @@ def daily_summary():
 
 @app.post("/learn/analyze")
 def learn_analyze():
-    """สร้าง prompt สำหรับการเรียนรู้ + ให้ AI วิเคราะห์ (ถ้ามี LLM key)"""
     prompt = build_learning_prompt()
     analyzer = ADAAIAnalyzer()
     try:
@@ -94,17 +96,11 @@ def learn_analyze():
 
 @app.post("/emergency/stop")
 def emergency_stop():
-    """ปิดตำแหน่งทั้งหมดทันที + หยุดการเทรดใหม่ชั่วคราว"""
-    result = manager.emergency_stop()
+    result = manager.emergency_stop(reason="manual")
     return JSONResponse(content=result)
 
 
 @app.post("/emergency/resume")
 def emergency_resume():
-    """เปิดการเทรดใหม่หลัง emergency stop"""
-    manager.trading_enabled = True
-    return {
-        "status": "resumed",
-        "trading_enabled": True,
-        "message": "Trading has been re-enabled. New cycles can run again.",
-    }
+    result = manager.resume()
+    return JSONResponse(content=result)
