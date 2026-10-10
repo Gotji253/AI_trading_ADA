@@ -10,11 +10,13 @@ from fastapi.responses import JSONResponse
 
 from src.agents.manager import ManagerAgent
 from src.memory.learning_prompt import build_learning_prompt
+from src.memory.self_improve import SelfImprovementEngine
 from src.analysis.ai_analyzer import ADAAIAnalyzer
 from src.paper.trader import PaperTrader
 
-app = FastAPI(title="AI_trading_ADA Multi-Agent", version="1.3.0")
+app = FastAPI(title="AI_trading_ADA Multi-Agent", version="1.4.0")
 manager = ManagerAgent()
+engine = SelfImprovementEngine()
 
 
 @app.get("/")
@@ -34,7 +36,6 @@ def status():
 
 @app.post("/cycle")
 def run_cycle():
-    """รันหนึ่งรอบ: Alpha → Risk → Execution"""
     result = manager.run_cycle()
     return JSONResponse(content=result)
 
@@ -80,18 +81,9 @@ def daily_summary():
 
 @app.post("/learn/analyze")
 def learn_analyze():
-    prompt = build_learning_prompt()
-    analyzer = ADAAIAnalyzer()
-    try:
-        analysis = analyzer._call_llm(prompt) if hasattr(analyzer, "_call_llm") else prompt
-    except Exception as e:
-        analysis = f"LLM call failed: {e}\n\nPrompt:\n{prompt}"
-
-    return {
-        "status": "ok",
-        "learning_prompt": prompt,
-        "ai_suggestion": analysis,
-    }
+    """วังจร Self-Improvement เต็ม (วิเคราะห์ + แนะนำ + Validate)"""
+    result = engine.run_cycle()
+    return JSONResponse(content=result)
 
 
 @app.post("/emergency/stop")
