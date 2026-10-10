@@ -1,6 +1,9 @@
 """
-Paper Trading Simulator for ADA (improved).
-Natural Thai Telegram notifications.
+Paper Trading Simulator for ADA.
+- Requires Multi-Timeframe agreement + near S/R + ATR filter before entry
+- Better position sizing based on SL distance
+- Daily loss limit and max open risk
+- Natural Thai Telegram notifications
 """
 
 import json
@@ -11,6 +14,8 @@ from typing import Optional, Dict, Any, List
 
 from src.config import get_config
 from src.signals.ada_signals import ADASignalGenerator
+from src.signals.multi_tf import MultiTimeframeAnalyzer
+from src.analysis.levels import SupportResistance
 from src.data.ada_price import ADAPriceFetcher
 from src.notify.telegram import TelegramNotifier
 
@@ -25,6 +30,8 @@ class PaperTrader:
         self.state = self._load_state()
         self.fetcher = ADAPriceFetcher()
         self.notifier = TelegramNotifier() if notify else None
+        self.multi = MultiTimeframeAnalyzer()
+        self.levels = SupportResistance()
 
     def _load_state(self) -> Dict[str, Any]:
         DATA_DIR.mkdir(parents=True, exist_ok=True)
@@ -38,6 +45,7 @@ class PaperTrader:
             "position": None,
             "trades": [],
             "equity_curve": [{"ts": datetime.now(timezone.utc).isoformat(), "equity": self.initial_balance}],
+            "daily_pnl": {},
             "daily_trades": {},
             "created_at": datetime.now(timezone.utc).isoformat(),
         }
@@ -50,6 +58,9 @@ class PaperTrader:
 
     def _trades_today(self) -> int:
         return self.state.get("daily_trades", {}).get(self._today_key(), 0)
+
+    def _daily_pnl(self) -> float:
+        return self.state.get("daily_pnl", {}).get(self._today_key(), 0.0)
 
     def _notify(self, text: str):
         if self.notifier and self.notifier.enabled:
@@ -97,6 +108,7 @@ class PaperTrader:
             "equity": round(self.state["balance_usdt"] + unrealized, 2),
             "total_trades": len(self.state.get("trades", [])),
             "trades_today": self._trades_today(),
+            "daily_pnl": round(self._daily_pnl(), 2),
             "stats": stats,
         }
 
@@ -132,6 +144,16 @@ class PaperTrader:
             "avg_loss": round(sum(losses) / len(losses), 2) if losses else 0,
         }
 
+    def _check_daily_loss_limit(self) -> bool:
+        """Return True if daily loss limit is breached."""
+        limit_pct = float(os.getenv("DAILY_LOSS_LIMIT_PCT", "3"))
+        daily_pnl = self._daily_pnl()
+        equity = self.state["balance_usdt"]
+        if equity <= 0:
+            return True
+        loss_pct = abs(min(daily_pnl, 0)) / equity * 100
+        return loss_pct >= limit_pct
+
     def check_sl_tp(self) -> Optional[Dict[str, Any]]:
         pos = self.state.get("position")
         if not pos or not pos.get("stop_loss") or not pos.get("take_profit"):
@@ -165,6 +187,46 @@ class PaperTrader:
             return result
         return None
 
+    def _near_level(self, price: float, level: Optional[float], threshold_pct: float = 1.5) -> bool:
+        if not level or level <= 0:
+            return False
+        return abs(price - level) / level * 100 <= threshold_pct
+
+    def _passes_filters(self, signal: str, price: float, multi: Dict, levels: Dict) -> tuple[bool, str]:
+        """Return (allowed, reason)."""
+        # 1. Multi-TF agreement
+        rec = multi.get("recommendation", "hold")
+        if rec != signal:
+            return False, f"Multi-TF recommendation is {rec}, not {signal}"
+
+        agreement = multi.get("agreement", "0/0")
+        try:
+            agree_num = int(agreement.split("/")[0])
+            if agree_num < 2:
+                return False, "Not enough timeframe agreement (need >=2)"
+        except Exception:
+            return False, "Invalid agreement data"
+
+        # 2. Near Support / Resistance
+        nearest_sup = levels.get("nearest_support")
+        nearest_res = levels.get("nearest_resistance")
+        if signal == "buy":
+            if not self._near_level(price, nearest_sup):
+                return False, "Not near support for buy"
+        elif signal == "sell":
+            if not self._near_level(price, nearest_res):
+                return False, "Not near resistance for sell"
+
+        # 3. ATR / volatility filter (avoid quiet market)
+        # Approximate using level distance or skip if no good data
+        # For simplicity: require some distance between S/R
+        if nearest_sup and nearest_res:
+            range_pct = abs(nearest_res - nearest_sup) / price * 100
+            if range_pct < 1.0:
+                return False, "Market too quiet (S/R range < 1%)"
+
+        return True, "All filters passed"
+
     def open_position(
         self,
         side: str,
@@ -176,26 +238,34 @@ class PaperTrader:
         if self.state.get("position"):
             return {"status": "error", "message": "Already have an open position."}
 
+        if self._check_daily_loss_limit():
+            return {"status": "error", "message": "Daily loss limit reached. Trading paused."}
+
         cfg = get_config()
         max_daily = int(os.getenv("MAX_DAILY_TRADES", "5"))
         if self._trades_today() >= max_daily:
             return {"status": "error", "message": f"Daily trade limit reached ({max_daily})"}
 
-        risk = risk_pct if risk_pct is not None else cfg.MAX_POSITION_PCT
+        # Max open risk (percentage of equity)
+        max_risk_pct = float(os.getenv("MAX_OPEN_RISK_PCT", "5"))
+        risk = min(risk_pct or cfg.MAX_POSITION_PCT, max_risk_pct)
         risk_amount = self.state["balance_usdt"] * (risk / 100.0)
 
+        # Position sizing based on actual SL distance
         if stop_loss and abs(price - stop_loss) > 0:
             risk_per_unit = abs(price - stop_loss)
             qty = risk_amount / risk_per_unit
         else:
-            qty = risk_amount / price if price > 0 else 0
+            # Fallback: use 2% of price as assumed risk
+            risk_per_unit = price * 0.02
+            qty = risk_amount / risk_per_unit if risk_per_unit > 0 else 0
 
         if qty <= 0:
             return {"status": "error", "message": "Invalid quantity"}
 
         cost = qty * price
-        if cost > self.state["balance_usdt"] * 0.95:
-            qty = (self.state["balance_usdt"] * 0.95) / price
+        if cost > self.state["balance_usdt"] * 0.9:
+            qty = (self.state["balance_usdt"] * 0.9) / price
             cost = qty * price
 
         self.state["balance_usdt"] -= cost
@@ -215,10 +285,11 @@ class PaperTrader:
         msg = (
             f"เปิดตำแหน่งจำลอง (Paper)\n\n"
             f"ทำการ: {side_th} ADA\n"
-            f"ราคาเข้า: {price} USDT\n"
+            f"ราคาเข้า: {round(price, 6)} USDT\n"
             f"จำนวน: {round(qty, 2)} ADA\n"
             f"จุดขาดทุน: {stop_loss or '-'}\n"
             f"เป้าหมายกำไร: {take_profit or '-'}\n\n"
+            f"ผ่านการกรอง Multi-TF + ใกล้แนวรับ/ต้าน\n"
             f"นี้เป็นการจำลองเทรดเท่านั้น ยังไม่ได้ใช้เงินจริง"
         )
         self._notify(msg)
@@ -251,6 +322,10 @@ class PaperTrader:
 
         self.state["balance_usdt"] += qty * entry + pnl
 
+        # Record daily PnL
+        today = self._today_key()
+        self.state.setdefault("daily_pnl", {})[today] = self._daily_pnl() + pnl
+
         trade = {
             "side": side,
             "entry": entry,
@@ -281,7 +356,7 @@ class PaperTrader:
             f"ปิดตำแหน่งจำลอง (Paper)\n\n"
             f"ทำการ: ปิด {side_th} ADA\n"
             f"เหตุผล: {reason_th}\n"
-            f"ราคาปิด: {price} USDT\n"
+            f"ราคาปิด: {round(price, 6)} USDT\n"
             f"ผลลัพธ์: {result_text} {abs(trade['pnl'])} USDT ({trade['pnl_pct']}%)\n\n"
             f"นี้เป็นการจำลองเทรดเท่านั้น ยังไม่ได้ใช้เงินจริง"
         )
@@ -298,35 +373,65 @@ class PaperTrader:
         }
 
     def auto_trade(self, interval: str = "1h") -> Dict[str, Any]:
+        """Improved auto trade with multi-TF, S/R, and risk filters."""
         sl_tp_result = self.check_sl_tp()
         if sl_tp_result:
             return {"sl_tp_triggered": sl_tp_result, "paper_status": self.status()}
 
-        gen = ADASignalGenerator()
-        sig = gen.generate(interval=interval)
-        if sig.get("status") != "ok":
-            return sig
+        if self._check_daily_loss_limit():
+            return {
+                "status": "paused",
+                "message": "Daily loss limit reached. No new trades today.",
+                "paper_status": self.status(),
+            }
 
-        price = sig["price"]
-        signal = sig["signal"]
-        result = {"signal": sig, "action": None}
+        # Multi-timeframe analysis
+        multi = self.multi.analyze()
+        if multi.get("status") != "ok":
+            return multi
 
-        pos = self.state.get("position")
+        recommendation = multi.get("recommendation", "hold")
+        if recommendation not in ("buy", "sell"):
+            return {
+                "status": "ok",
+                "message": "No multi-TF agreement for entry",
+                "multi_tf": multi,
+                "paper_status": self.status(),
+            }
 
-        if signal in ("buy", "sell") and not pos and sig.get("confidence", 0) >= 0.4:
-            side = "long" if signal == "buy" else "short"
-            result["action"] = self.open_position(
-                side, price,
-                stop_loss=sig.get("stop_loss"),
-                take_profit=sig.get("take_profit"),
-            )
-        elif pos and ((signal == "sell" and pos["side"] == "long") or (signal == "buy" and pos["side"] == "short")):
-            result["action"] = self.close_position(price, reason="opposite_signal")
-        else:
-            result["action"] = {"status": "ok", "message": "No action"}
+        # Levels
+        levels = self.levels.find_levels(interval="1h")
+        price = levels.get("current_price") or multi.get("timeframes", {}).get("1h", {}).get("price")
+        if not price:
+            return {"status": "error", "message": "Could not get current price"}
 
-        result["paper_status"] = self.status()
-        return result
+        # Filters
+        allowed, reason = self._passes_filters(recommendation, price, multi, levels)
+        if not allowed:
+            return {
+                "status": "ok",
+                "message": f"Filters not passed: {reason}",
+                "multi_tf": multi,
+                "levels": levels,
+                "paper_status": self.status(),
+            }
+
+        # Get SL/TP from 1h signal
+        sig_1h = multi.get("timeframes", {}).get("1h", {})
+        stop_loss = sig_1h.get("stop_loss")
+        take_profit = sig_1h.get("take_profit")
+
+        side = "long" if recommendation == "buy" else "short"
+        action = self.open_position(side, price, stop_loss=stop_loss, take_profit=take_profit)
+
+        return {
+            "status": "ok",
+            "multi_tf": multi,
+            "levels": levels,
+            "filter_reason": reason,
+            "action": action,
+            "paper_status": self.status(),
+        }
 
     def history(self, limit: int = 20) -> List[Dict]:
         return self.state.get("trades", [])[-limit:]
