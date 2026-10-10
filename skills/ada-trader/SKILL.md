@@ -1,44 +1,40 @@
-# ADA Trader Skill
+# ADA Trader Skill (Hermes)
 
-Specialized skill for Hermes Agent to analyze and propose trades **exclusively for Cardano (ADA)**.
+Specialized skill for Hermes Agent — **ADA only**.
 
 ## Trigger
 
-Invoke with `/ada-trader` or natural language requests about ADA trading.
+`/ada-trader` or natural language about ADA trading / analysis.
 
-## Capabilities
+## How to use in Hermes
 
-1. **Market Snapshot**
-   - Fetch current ADA/USDT price, 24h volume, change %
-   - Technical indicators: RSI(14), MACD, EMA 20/50/200, Bollinger Bands
+1. Copy `src/` into your Hermes workspace or add it to PYTHONPATH.
+2. The skill should call the Python modules below.
 
-2. **Signal Generation**
-   - Bullish / Bearish / Neutral
-   - Entry, Stop-Loss, Take-Profit levels
-   - Position sizing suggestion based on risk %
+## Recommended implementation (for Hermes tool / skill)
 
-3. **Risk Checks**
-   - Volatility filter
-   - Max drawdown awareness
-   - No trades outside ADA
+```python
+from src.signals.ada_signals import ADASignalGenerator
 
-4. **Output Format**
-   Always respond in structured form (JSON preferred for automation) + Thai summary.
-
-## Example Invocation
-
-```
-/ada-trader analyze today
+gen = ADASignalGenerator(source="binance")
+result = gen.generate(interval="1h")
+# Return result as JSON + Thai summary
 ```
 
-## Implementation Notes
+## Output fields
 
-- Use tools for real-time data (CCXT, Binance API, or free sources).
-- Store past signals and outcomes in Hermes memory for learning.
-- Paper trading mode by default.
+- `signal`: buy | sell | hold
+- `confidence`: 0.0 – 1.0
+- `price`, `rsi`, `ema20`, `ema50`
+- `stop_loss`, `take_profit`
+- `reasons`: list of why the signal was generated
 
-## Safety Rules
+## Safety
 
-- Refuse any request to trade other coins.
-- Require confirmation before any live order.
-- Log every decision.
+- ADA only. Refuse other coins.
+- Paper / dry-run by default.
+- Require explicit user confirmation before any live order.
+
+## Example Thai summary
+
+"ADA ปัจจุบันราคา X USDT, RSI Y, สัญญาณ: ซื้อ/ขาย/ถือ (ความมั่นใจ Z%)"
