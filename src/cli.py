@@ -12,6 +12,11 @@ from src.signals.ada_signals import ADASignalGenerator
 from src.signals.multi_tf import MultiTimeframeAnalyzer
 from src.paper.trader import PaperTrader
 from src.analysis.ai_analyzer import ADAAIAnalyzer
+from src.analysis.levels import SupportResistance
+from src.data.news import NewsSentiment
+from src.data.onchain import CardanoOnChain
+from src.memory.trade_memory import TradeMemory
+from src.scheduler.hourly import run_hourly_analysis
 
 
 def cmd_status(_args):
@@ -47,6 +52,37 @@ def cmd_multi_tf(_args):
     print(json.dumps(result, ensure_ascii=False, indent=2))
 
 
+def cmd_levels(args):
+    sr = SupportResistance()
+    result = sr.find_levels(interval=args.interval)
+    print(json.dumps(result, ensure_ascii=False, indent=2))
+
+
+def cmd_news(_args):
+    ns = NewsSentiment()
+    result = ns.get_ada_news()
+    if result.get("articles"):
+        result["sentiment"] = ns.simple_sentiment(result["articles"])
+    print(json.dumps(result, ensure_ascii=False, indent=2))
+
+
+def cmd_onchain(_args):
+    oc = CardanoOnChain()
+    result = {"tip": oc.get_tip(), "epoch": oc.get_epoch_info()}
+    print(json.dumps(result, ensure_ascii=False, indent=2))
+
+
+def cmd_memory(_args):
+    mem = TradeMemory()
+    result = mem.update_from_paper()
+    print(json.dumps(result, ensure_ascii=False, indent=2))
+
+
+def cmd_hourly(_args):
+    result = run_hourly_analysis()
+    print(json.dumps(result, ensure_ascii=False, indent=2))
+
+
 def cmd_ai_analyze(args):
     analyzer = ADAAIAnalyzer(model=args.model)
     result = analyzer.analyze(interval=args.interval)
@@ -78,7 +114,7 @@ def main():
     parser = argparse.ArgumentParser(prog="ada-trader")
     sub = parser.add_subparsers(dest="command", required=True)
 
-    sub.add_parser("status", help="Check config and API key status").set_defaults(func=cmd_status)
+    sub.add_parser("status").set_defaults(func=cmd_status)
 
     p_price = sub.add_parser("ada-price")
     p_price.add_argument("--source", default="binance", choices=["binance", "coingecko"])
@@ -89,7 +125,16 @@ def main():
     p_sig.add_argument("--source", default="binance", choices=["binance", "coingecko"])
     p_sig.set_defaults(func=cmd_signal)
 
-    sub.add_parser("multi-tf", help="Multi-timeframe analysis (15m + 1h + 4h)").set_defaults(func=cmd_multi_tf)
+    sub.add_parser("multi-tf").set_defaults(func=cmd_multi_tf)
+
+    p_levels = sub.add_parser("levels", help="Support / Resistance levels")
+    p_levels.add_argument("--interval", default="1h")
+    p_levels.set_defaults(func=cmd_levels)
+
+    sub.add_parser("news", help="ADA news + simple sentiment").set_defaults(func=cmd_news)
+    sub.add_parser("onchain", help="Basic Cardano on-chain (Koios)").set_defaults(func=cmd_onchain)
+    sub.add_parser("memory", help="Update and show paper trade memory").set_defaults(func=cmd_memory)
+    sub.add_parser("hourly", help="Run full hourly analysis report").set_defaults(func=cmd_hourly)
 
     p_ai = sub.add_parser("ai-analyze")
     p_ai.add_argument("--interval", default="1h")
@@ -97,7 +142,7 @@ def main():
     p_ai.set_defaults(func=cmd_ai_analyze)
 
     sub.add_parser("paper-status").set_defaults(func=cmd_paper_status)
-    sub.add_parser("paper-stats", help="Win rate, profit factor, max drawdown").set_defaults(func=cmd_paper_stats)
+    sub.add_parser("paper-stats").set_defaults(func=cmd_paper_stats)
 
     p_auto = sub.add_parser("paper-auto")
     p_auto.add_argument("--interval", default="1h")
