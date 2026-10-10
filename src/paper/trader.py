@@ -1,9 +1,6 @@
 """
 Paper Trading Simulator for ADA (improved).
-- Auto close on Stop-Loss / Take-Profit
-- Equity curve + performance stats
-- Daily trade limit + risk-based sizing
-- Optional Telegram notification on open/close
+Natural Thai Telegram notifications.
 """
 
 import json
@@ -214,11 +211,15 @@ class PaperTrader:
         self._record_equity()
         self._save_state()
 
+        side_th = "ซื้อ" if side.lower() == "long" else "ขาย"
         msg = (
-            f"PAPER OPEN {side.upper()}\n"
-            f"Entry: {price}\n"
-            f"Qty: {round(qty, 4)}\n"
-            f"SL: {stop_loss} | TP: {take_profit}"
+            f"เปิดตำแหน่งจำลอง (Paper)\n\n"
+            f"ทำการ: {side_th} ADA\n"
+            f"ราคาเข้า: {price} USDT\n"
+            f"จำนวน: {round(qty, 2)} ADA\n"
+            f"จุดขาดทุน: {stop_loss or '-'}\n"
+            f"เป้าหมายกำไร: {take_profit or '-'}\n\n"
+            f"นี้เป็นการจำลองเทรดเท่านั้น ยังไม่ได้ใช้เงินจริง"
         )
         self._notify(msg)
 
@@ -266,10 +267,23 @@ class PaperTrader:
         self._record_equity()
         self._save_state()
 
+        reason_th = {
+            "stop_loss": "ถึงจุดขาดทุน",
+            "take_profit": "ถึงเป้าหมายกำไร",
+            "opposite_signal": "สัญญาณตรงข้าม",
+            "manual": "ปิดเอง",
+        }.get(reason, reason)
+
+        result_text = "กำไร" if pnl >= 0 else "ขาดทุน"
+        side_th = "ซื้อ" if side == "long" else "ขาย"
+
         msg = (
-            f"PAPER CLOSE {side.upper()}\n"
-            f"Exit: {price} | Reason: {reason}\n"
-            f"PnL: {trade['pnl']} USDT ({trade['pnl_pct']}%)"
+            f"ปิดตำแหน่งจำลอง (Paper)\n\n"
+            f"ทำการ: ปิด {side_th} ADA\n"
+            f"เหตุผล: {reason_th}\n"
+            f"ราคาปิด: {price} USDT\n"
+            f"ผลลัพธ์: {result_text} {abs(trade['pnl'])} USDT ({trade['pnl_pct']}%)\n\n"
+            f"นี้เป็นการจำลองเทรดเท่านั้น ยังไม่ได้ใช้เงินจริง"
         )
         self._notify(msg)
 
