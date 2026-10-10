@@ -1,10 +1,5 @@
 """
 CLI entry point for Hermes Agent ADA skill.
-Usage:
-  python -m src.cli status
-  python -m src.cli ada-signal --interval 1h
-  python -m src.cli paper-status
-  python -m src.cli paper-auto --interval 1h
 """
 
 import argparse
@@ -15,6 +10,7 @@ from src.config import get_config
 from src.data.ada_price import ADAPriceFetcher
 from src.signals.ada_signals import ADASignalGenerator
 from src.paper.trader import PaperTrader
+from src.analysis.ai_analyzer import ADAAIAnalyzer
 
 
 def cmd_status(_args):
@@ -26,6 +22,8 @@ def cmd_status(_args):
     }
     if not cfg.has_binance_keys():
         result["warning"] = "BINANCE_API_KEY / SECRET not set. Using public endpoints."
+    if not (cfg.OPENROUTER_API_KEY or cfg.OPENAI_API_KEY):
+        result["warning_llm"] = "No LLM API key set. AI analysis will not work."
     print(json.dumps(result, ensure_ascii=False, indent=2))
 
 
@@ -39,6 +37,12 @@ def cmd_signal(args):
     gen = ADASignalGenerator(source=args.source)
     result = gen.generate(interval=args.interval)
     result["trading_mode"] = get_config().TRADING_MODE
+    print(json.dumps(result, ensure_ascii=False, indent=2))
+
+
+def cmd_ai_analyze(args):
+    analyzer = ADAAIAnalyzer()
+    result = analyzer.analyze(interval=args.interval)
     print(json.dumps(result, ensure_ascii=False, indent=2))
 
 
@@ -72,6 +76,10 @@ def main():
     p_sig.add_argument("--interval", default="1h")
     p_sig.add_argument("--source", default="binance", choices=["binance", "coingecko"])
     p_sig.set_defaults(func=cmd_signal)
+
+    p_ai = sub.add_parser("ai-analyze", help="Full AI analysis of ADA (requires LLM key)")
+    p_ai.add_argument("--interval", default="1h")
+    p_ai.set_defaults(func=cmd_ai_analyze)
 
     sub.add_parser("paper-status", help="Show paper trading account status").set_defaults(func=cmd_paper_status)
 

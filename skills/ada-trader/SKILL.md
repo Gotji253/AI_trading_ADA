@@ -1,39 +1,42 @@
 ---
 name: ada-trader
-description: Analyze ADA and run paper trading. Generate signals and simulate trades. Use for ADA analysis or paper trading status.
-version: 1.2.0
+description: Analyze ADA with technicals + AI reasoning and run paper trading. Use for ADA analysis, signals, or paper trading.
+version: 1.3.0
 author: AI_trading_ADA
 license: MIT
 platforms: [linux, macos, windows]
 metadata:
   hermes:
-    tags: [ADA, Cardano, Trading, Paper, Signals]
+    tags: [ADA, Cardano, Trading, AI, Paper]
     category: finance
     requires_toolsets: [terminal]
 ---
 
-# ADA Trader Skill (with Paper Trading)
+# ADA Trader Skill
 
-ADA only. Paper trading by default.
+ADA only. Supports technical signals, AI analysis, and paper trading.
 
 ## Commands (via terminal)
 
 ```bash
 python -m src.cli status
 python -m src.cli ada-signal --interval 1h
+python -m src.cli ai-analyze --interval 1h
 python -m src.cli paper-status
 python -m src.cli paper-auto --interval 1h
-python -m src.cli paper-history
 ```
 
 ## Procedure
 
-1. For analysis: run `ada-signal`.
-2. For paper trading: run `paper-auto` (it will open/close virtual positions based on the signal).
-3. Check account with `paper-status`.
-4. Always state that this is paper trading — no real money.
+1. For quick signal: run `ada-signal`.
+2. For full AI analysis (Thai summary + reasoning): run `ai-analyze`.
+3. For paper trading: run `paper-auto`.
+4. Always note that this is analysis / paper only.
+
+## Requirements for AI Analysis
+
+Set `OPENROUTER_API_KEY` or `OPENAI_API_KEY` in `.env`.
 
 ## Safety
 
-- Never place real orders.
-- Paper state is stored locally in `data/paper_state.json`.
+No live orders. Paper trading only.
