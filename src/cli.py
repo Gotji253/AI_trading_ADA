@@ -41,7 +41,7 @@ def cmd_signal(args):
 
 
 def cmd_ai_analyze(args):
-    analyzer = ADAAIAnalyzer()
+    analyzer = ADAAIAnalyzer(model=args.model)
     result = analyzer.analyze(interval=args.interval)
     print(json.dumps(result, ensure_ascii=False, indent=2))
 
@@ -79,6 +79,11 @@ def main():
 
     p_ai = sub.add_parser("ai-analyze", help="Full AI analysis of ADA (requires LLM key)")
     p_ai.add_argument("--interval", default="1h")
+    p_ai.add_argument(
+        "--model",
+        default=None,
+        help="Override OpenRouter model (default: free model from .env or config)",
+    )
     p_ai.set_defaults(func=cmd_ai_analyze)
 
     sub.add_parser("paper-status", help="Show paper trading account status").set_defaults(func=cmd_paper_status)

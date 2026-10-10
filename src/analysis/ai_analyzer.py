@@ -1,10 +1,9 @@
 """
 AI Analysis for ADA.
-Combines technical data with LLM reasoning.
+Uses free OpenRouter model by default; model can be switched via config or argument.
 """
 
 import json
-import os
 from typing import Dict, Any, Optional
 
 import requests
@@ -14,12 +13,12 @@ from src.signals.ada_signals import ADASignalGenerator
 
 
 class ADAAIAnalyzer:
-    def __init__(self):
+    def __init__(self, model: Optional[str] = None):
         self.cfg = get_config()
         self.signal_gen = ADASignalGenerator()
+        self.model = model or self.cfg.OPENROUTER_MODEL
 
     def _call_llm(self, prompt: str) -> str:
-        """Call OpenRouter or OpenAI."""
         if self.cfg.OPENROUTER_API_KEY:
             return self._openrouter(prompt)
         if self.cfg.OPENAI_API_KEY:
@@ -31,13 +30,15 @@ class ADAAIAnalyzer:
         headers = {
             "Authorization": f"Bearer {self.cfg.OPENROUTER_API_KEY}",
             "Content-Type": "application/json",
+            "HTTP-Referer": "https://github.com/Gotji253/AI_trading_ADA",
+            "X-Title": "AI_trading_ADA",
         }
         payload = {
-            "model": "anthropic/claude-3.5-sonnet",  # or any model you prefer
+            "model": self.model,
             "messages": [{"role": "user", "content": prompt}],
             "max_tokens": 800,
         }
-        r = requests.post(url, headers=headers, json=payload, timeout=60)
+        r = requests.post(url, headers=headers, json=payload, timeout=90)
         r.raise_for_status()
         return r.json()["choices"][0]["message"]["content"]
 
@@ -57,7 +58,6 @@ class ADAAIAnalyzer:
         return r.json()["choices"][0]["message"]["content"]
 
     def analyze(self, interval: str = "1h") -> Dict[str, Any]:
-        """Full AI analysis of ADA."""
         sig = self.signal_gen.generate(interval=interval)
         if sig.get("status") != "ok":
             return sig
@@ -81,6 +81,7 @@ Provide a concise analysis in Thai with these sections:
             "status": "ok",
             "symbol": "ADA",
             "interval": interval,
+            "model_used": self.model,
             "technical": sig,
             "ai_analysis": ai_text,
             "trading_mode": self.cfg.TRADING_MODE,

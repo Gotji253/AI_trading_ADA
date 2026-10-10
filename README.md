@@ -1,7 +1,7 @@
 # AI_trading_ADA
 
 Hermes Agent for **Cardano (ADA) only**  
-Technical signals + **AI Analysis** + Paper Trading.
+Technical signals + **AI Analysis** (free OpenRouter model) + Paper Trading.
 
 ## Quick Start
 
@@ -10,7 +10,7 @@ git clone https://github.com/Gotji253/AI_trading_ADA.git
 cd AI_trading_ADA
 pip install -r requirements.txt
 cp .env.example .env
-# Edit .env — add BINANCE keys and OPENROUTER_API_KEY (or OPENAI_API_KEY)
+# Edit .env — add OPENROUTER_API_KEY (and optional BINANCE keys)
 ```
 
 ## Commands
@@ -19,19 +19,22 @@ cp .env.example .env
 python -m src.cli status
 python -m src.cli ada-price
 python -m src.cli ada-signal --interval 1h
-python -m src.cli ai-analyze --interval 1h      # AI analysis (needs LLM key)
+python -m src.cli ai-analyze --interval 1h
+python -m src.cli ai-analyze --interval 1h --model google/gemma-2-9b-it:free
 python -m src.cli paper-status
 python -m src.cli paper-auto --interval 1h
-python -m src.cli paper-history
 ```
 
-## AI Analysis
+## AI Analysis & Model Switching
 
-`ai-analyze` sends the technical data to an LLM and returns a structured Thai analysis:
-- สถานะการณ์ทางเทคนิค
-- ทัศนคติเชิงสัญญาณ
-- ระดับความเสี่ยง
-- แนะนำสำหรับนักเทรดระยะสั้น
+- Default model: `meta-llama/llama-3.1-8b-instruct:free` (free on OpenRouter)
+- Change model permanently: set `OPENROUTER_MODEL=...` in `.env`
+- Change model for one run: `--model <model-id>`
+
+Popular free models:
+- `meta-llama/llama-3.1-8b-instruct:free`
+- `google/gemma-2-9b-it:free`
+- `mistralai/mistral-7b-instruct:free`
 
 ## Paper Trading
 
