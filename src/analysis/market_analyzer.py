@@ -1,6 +1,6 @@
 """
 3-Dimension Market Analysis for ADA
-Enhanced with flexible high-quality setups for both Long and Short.
+Flexible high-quality setups for both Long and Short.
 """
 
 import os
@@ -21,12 +21,12 @@ class MarketAnalyzer:
         self.news = NewsSentiment()
         self.regime = RegimeAgent()
 
-        # Configurable thresholds (more flexible defaults)
-        self.sr_proximity_pct = float(os.getenv("SR_PROXIMITY_PCT", "2.0"))
-        self.rsi_long_15m = float(os.getenv("RSI_LONG_15M", "45"))
-        self.rsi_long_1h = float(os.getenv("RSI_LONG_1H", "60"))
-        self.rsi_short_15m = float(os.getenv("RSI_SHORT_15M", "55"))
-        self.rsi_short_1h = float(os.getenv("RSI_SHORT_1H", "40"))
+        # Very flexible thresholds
+        self.sr_proximity_pct = float(os.getenv("SR_PROXIMITY_PCT", "3.0"))
+        self.rsi_long_15m = float(os.getenv("RSI_LONG_15M", "50"))
+        self.rsi_long_1h = float(os.getenv("RSI_LONG_1H", "65"))
+        self.rsi_short_15m = float(os.getenv("RSI_SHORT_15M", "50"))
+        self.rsi_short_1h = float(os.getenv("RSI_SHORT_1H", "35"))
 
     def analyze(self) -> Dict[str, Any]:
         multi = self.multi.analyze()
@@ -45,8 +45,10 @@ class MarketAnalyzer:
         setup_quality = "none"
         setup_type = None
 
-        is_bullish_regime = regime.get("regime") in ("trending_bull", "mixed")
-        is_bearish_regime = regime.get("regime") in ("trending_bear", "mixed")
+        # Accept any non-opposite regime
+        regime_name = regime.get("regime", "unknown")
+        is_bullish_ok = regime_name not in ("trending_bear", "high_volatility")
+        is_bearish_ok = regime_name not in ("trending_bull", "high_volatility")
 
         near_support = False
         near_resistance = False
@@ -59,19 +61,18 @@ class MarketAnalyzer:
         rsi_15m = tf_15m.get("rsi", 50)
         rsi_1h = tf_1h.get("rsi", 50)
 
-        # Flexible Long setup
-        if is_bullish_regime and near_support and rsi_15m < self.rsi_long_15m and rsi_1h < self.rsi_long_1h:
+        # Flexible Long
+        if is_bullish_ok and near_support and rsi_15m < self.rsi_long_15m and rsi_1h < self.rsi_long_1h:
             recommendation = "buy"
             setup_quality = "high"
             setup_type = "pullback_to_support"
 
-        # Flexible Short setup
-        elif is_bearish_regime and near_resistance and rsi_15m > self.rsi_short_15m and rsi_1h > self.rsi_short_1h:
+        # Flexible Short
+        elif is_bearish_ok and near_resistance and rsi_15m > self.rsi_short_15m and rsi_1h > self.rsi_short_1h:
             recommendation = "sell"
             setup_quality = "high"
             setup_type = "rally_to_resistance"
 
-        # Fallback to multi-TF
         elif multi.get("recommendation") in ("buy", "sell"):
             recommendation = multi.get("recommendation")
             setup_quality = "medium"
