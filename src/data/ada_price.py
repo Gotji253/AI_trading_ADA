@@ -27,9 +27,9 @@ class ADAPriceFetcher:
         self.session = requests.Session()
         self.session.headers.update({"User-Agent": "AI_trading_ADA/1.0"})
 
-        # Binance API keys (optional)
-        self.binance_api_key = os.getenv("BINANCE_API_KEY", "")
-        self.binance_api_secret = os.getenv("BINANCE_API_SECRET", "")
+        # Binance API keys (optional) — strip whitespace/newlines from secrets
+        self.binance_api_key = os.getenv("BINANCE_API_KEY", "").strip()
+        self.binance_api_secret = os.getenv("BINANCE_API_SECRET", "").strip()
 
     def get_current_price(self) -> Dict[str, Any]:
         """Get current ADA price snapshot."""
