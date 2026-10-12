@@ -1,34 +1,34 @@
 # Systematic Trade Blueprint
 
-## สัญญาณที่ชอบ (High Quality Setup)
+## สัญญาณคุณภาพสูง (High Quality Setup)
 
-1. **Regime_Agent** = `trending_bull` (4h bias bullish)
-2. ราคาพักตัวลงมาใกล้ **1h Support Zone**
-3. บน 15m: RSI < 40 (oversold micro) + rejection บริเวณรับ
-4. Multi-TF alignment สูง
+### Long (Pullback to Support)
+1. **Regime_Agent** = `trending_bull`
+2. ราคาพักตัวลงมาใกล้ **1h Support Zone** (≤ 1.5%)
+3. บน 15m: RSI < 40 + บน 1h: RSI < 55
+
+### Short (Rally to Resistance)
+1. **Regime_Agent** = `trending_bear`
+2. ราคาราลลี่ขึ้นมาใกล้ **1h Resistance Zone** (≤ 1.5%)
+3. บน 15m: RSI > 60 + บน 1h: RSI > 45
 
 ## เหตุผล
 
-- 4h Bullish Trend + 1h Pullback to Support + 15m Oversold Trigger
-- ความน่าจะเป็นสูง (High Win-Rate Probability)
+- Long: 4h Bullish + 1h Pullback to Support + 15m Oversold
+- Short: 4h Bearish + 1h Rally to Resistance + 15m Overbought
 - ลดโอกาส Chop ใน Sideway เพราะ Regime กรองไว้
 
-## Risk Management (ตาม Blueprint)
+## Risk Management
 
 | กฎ | ค่า |
 |-----|-----|
-| Risk per Trade | **1.0%** of Equity |
-| Daily Loss Limit | **3.0%** |
-| Max Drawdown Hard Stop | **10.0%** → Quarantine |
+| Risk per Trade | 1.5% |
+| Daily Loss Limit | 4% |
+| Max Drawdown Hard Stop | 12% |
+| Cooldown | ขาดทุนติด 4 ครั้ง → พัก 20 นาที |
 
-## จุดแข็งของระบบ
+## ค่าที่ปรับได้
 
-- Regime_Agent + Risk_Agent กรองก่อน Execution
-- ลดการถูกตัด SL ในช่วง Sideway
-- ลดขนาดไม้ใน High Volatility
-
-## ข้อจำกัดที่ยังเหลือ
-
-- การตรวจจับ Pinbar ยังเป็นแบบประมาณ (rule-based)
-- Slippage ยังไม่ได้จำลองใน paper เต็มรูปแบบ
-- ต้องพึ่งบาคเทสต์ในสภาวะตลาดต่างๆ
+```bash
+SR_PROXIMITY_PCT=1.5
+```
