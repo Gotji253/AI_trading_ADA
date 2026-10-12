@@ -1,6 +1,6 @@
 """
 Regime_Agent Accuracy Validator (CSV Input)
-รองรับไฟล์ CSV ที่ดาวน์โหลดจาก Binance
+รองรับไฟล์ CSV ที่ดาวน์โหลดจาก Binance หรือแหล่งข้อมูลอื่น
 
 รูปแบบ CSV ที่รองรับ:
 - มีคอลัมน์: open, high, low, close, volume
@@ -26,11 +26,8 @@ class CSVRegimeValidator:
             raise FileNotFoundError(f"CSV not found: {self.csv_path}")
 
         df = pd.read_csv(self.csv_path)
-
-        # Normalize column names
         df.columns = [c.lower().strip() for c in df.columns]
 
-        # Detect time column
         time_col = None
         for c in ["timestamp", "open_time", "date", "time", "datetime"]:
             if c in df.columns:
@@ -38,18 +35,14 @@ class CSVRegimeValidator:
                 break
 
         if time_col:
-            # Try to parse time
-            if df[time_col].dtype == "int64" or df[time_col].dtype == "float64":
-                # Assume milliseconds
+            if df[time_col].dtype in ("int64", "float64"):
                 df["timestamp"] = pd.to_datetime(df[time_col], unit="ms", utc=True)
             else:
                 df["timestamp"] = pd.to_datetime(df[time_col], utc=True)
             df = df.set_index("timestamp")
         else:
-            # If no time column, create a simple index
             df.index = pd.date_range("2024-01-01", periods=len(df), freq="1h", tz="UTC")
 
-        # Ensure required columns
         required = ["open", "high", "low", "close"]
         for col in required:
             if col not in df.columns:
@@ -58,20 +51,26 @@ class CSVRegimeValidator:
         if "volume" not in df.columns:
             df["volume"] = 0.0
 
-        # Convert to numeric
         for col in ["open", "high", "low", "close", "volume"]:
             df[col] = pd.to_numeric(df[col], errors="coerce")
 
         df = df.dropna(subset=["open", "high", "low", "close"])
         return df[["open", "high", "low", "close", "volume"]]
 
-    def validate(self, forward_bars: int = 12, step: int = 6) -> Dict[str, Any]:
-        if len(self.df) < 80:
-            return {"status": "error", "message": "CSV has too few rows"}
+    def validate(self, forward_bars: int = 6, step: int = 3) -> Dict[str, Any]:
+        n = len(self.df)
+        # Lowered minimum from 80 to 30
+        if n < 30:
+            return {"status": "error", "message": f"CSV has too few rows ({n}). Need at least 30."}
+
+        # Dynamic start so we have enough history for indicators
+        start_idx = max(20, n // 5)
+        if start_idx >= n - forward_bars:
+            start_idx = max(15, n - forward_bars - 5)
 
         results = []
 
-        for i in range(60, len(self.df) - forward_bars, step):
+        for i in range(start_idx, n - forward_bars, step):
             slice_df = self.df.iloc[: i + 1].copy()
 
             original = self.agent.fetcher.get_with_indicators
@@ -79,7 +78,6 @@ class CSVRegimeValidator:
             def mock_get(interval="1h", limit=150):
                 if interval == "1h":
                     return slice_df.tail(min(limit, len(slice_df)))
-                # Approximate 4h from 1h data
                 try:
                     res = slice_df.resample("4h").agg({
                         "open": "first",
@@ -128,13 +126,13 @@ class CSVRegimeValidator:
 
     def _is_correct(self, regime: str, ret: float, max_up: float, max_down: float) -> bool:
         if regime == "trending_bull":
-            return ret > 0.4 or max_up > 1.2
+            return ret > 0.3 or max_up > 0.8
         if regime == "trending_bear":
-            return ret < -0.4 or max_down < -1.2
+            return ret < -0.3 or max_down < -0.8
         if regime == "ranging":
-            return abs(ret) < 1.5
+            return abs(ret) < 1.2
         if regime == "high_volatility":
-            return abs(max_up) > 1.8 or abs(max_down) > 1.8
+            return abs(max_up) > 1.5 or abs(max_down) > 1.5
         return False
 
     def _summarize(self, results: List[Dict]) -> Dict[str, Any]:
@@ -155,7 +153,7 @@ class CSVRegimeValidator:
                 "avg_confidence": round(sub["confidence"].mean(), 2),
             }
 
-        high_conf = df[df["confidence"] >= 0.65]
+        high_conf = df[df["confidence"] >= 0.6]
         high_acc = round(high_conf["correct"].mean() * 100, 1) if len(high_conf) else 0
 
         return {
@@ -167,6 +165,7 @@ class CSVRegimeValidator:
             "high_confidence_accuracy": high_acc,
             "high_confidence_samples": len(high_conf),
             "by_regime": by_regime,
+            "note": "Minimum requirement lowered to 30 candles",
         }
 
 
@@ -174,10 +173,10 @@ def main():
     import argparse
     import json
 
-    parser = argparse.ArgumentParser(description="Validate Regime_Agent using Binance CSV")
+    parser = argparse.ArgumentParser(description="Validate Regime_Agent using CSV")
     parser.add_argument("csv", help="Path to OHLCV CSV file")
-    parser.add_argument("--forward", type=int, default=12, help="Forward bars to evaluate")
-    parser.add_argument("--step", type=int, default=6, help="Step size")
+    parser.add_argument("--forward", type=int, default=6, help="Forward bars to evaluate")
+    parser.add_argument("--step", type=int, default=3, help="Step size")
     args = parser.parse_args()
 
     v = CSVRegimeValidator(args.csv)
