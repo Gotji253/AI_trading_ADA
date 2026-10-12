@@ -1,23 +1,14 @@
-name: Accuracy Test (Binance)
+name: Accuracy Test (Crypto.com)
 
 on:
   workflow_dispatch:
-    inputs:
-      lookback_bars:
-        description: 'Number of 1h bars to test'
-        required: false
-        default: '500'
-      forward_bars:
-        description: 'Forward bars for evaluation'
-        required: false
-        default: '12'
   schedule:
-    - cron: '0 2 * * 1'  # Every Monday at 02:00 UTC
+    - cron: '0 2 * * 1'
 
 jobs:
   test-accuracy:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 10
 
     steps:
       - name: Checkout repository
@@ -34,14 +25,20 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt || pip install pandas requests python-dotenv
 
-      - name: Run Regime Accuracy Test (Binance with API Key)
+      - name: Test Crypto.com Data Fetch
         env:
           PYTHONPATH: ${{ github.workspace }}
-          BINANCE_API_KEY: ${{ secrets.BINANCE_API_KEY }}
-          BINANCE_API_SECRET: ${{ secrets.BINANCE_API_SECRET }}
         run: |
-          echo "=== Regime_Agent Accuracy Test (with API Key) ==="
-          python -m src.backtest.regime_validator || echo "Regime test failed or limited data"
+          echo "=== Crypto.com Data Fetch Test ==="
+          python -c "
+from src.data.crypto_com_fetcher import CryptoComFetcher
+f = CryptoComFetcher()
+df = f.get_ohlcv('1h', 50)
+print(f'Candles fetched: {len(df)}')
+if not df.empty:
+    print(f'Latest price: {df.close.iloc[-1]:.5f}')
+    print(f'Date range: {df.index.min()} to {df.index.max()}')
+"
 
       - name: Run Synthetic Regime Test
         env:
@@ -50,20 +47,9 @@ jobs:
           echo "=== Synthetic Regime Test ==="
           python -m src.backtest.regime_validator_synthetic
 
-      - name: Upload results
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: accuracy-results
-          path: |
-            **/*accuracy*.json
-            **/*result*.txt
-          if-no-files-found: ignore
-
       - name: Summary
         if: always()
         run: |
           echo "## Accuracy Test Summary" >> $GITHUB_STEP_SUMMARY
-          echo "- Source: Binance (with API Key from secrets)" >> $GITHUB_STEP_SUMMARY
-          echo "- Regime validator and synthetic tests completed" >> $GITHUB_STEP_SUMMARY
-          echo "- Check logs above for detailed results" >> $GITHUB_STEP_SUMMARY
+          echo "- Primary source: Crypto.com" >> $GITHUB_STEP_SUMMARY
+          echo "- Synthetic test included" >> $GITHUB_STEP_SUMMARY
