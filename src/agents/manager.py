@@ -1,6 +1,6 @@
 """
 Manager_Agent — ประสานงาน Alpha → Risk → Execution
-รองรับ Regime_Agent และ Emergency / Quarantine
+รองรับ Regime_Agent, Emergency / Quarantine, และ Consecutive Loss Cooldown
 """
 
 from typing import Dict, Any
@@ -35,22 +35,30 @@ class ManagerAgent:
         # 1. Check existing exits first
         exit_result = self.execution.check_exits()
         if exit_result:
+            # Record result for consecutive loss tracking
+            pnl = exit_result.get("pnl") or exit_result.get("trade", {}).get("pnl", 0)
+            if pnl is not None:
+                self.risk.record_trade_result(float(pnl))
+
             return {
                 "cycle": "exit_triggered",
                 "regime": regime_out,
                 "result": exit_result,
+                "risk_state": {
+                    "consecutive_losses": self.risk._consecutive_losses,
+                    "in_cooldown": self.risk._in_cooldown(),
+                },
                 "status": self.execution.status(),
             }
 
-        # 2. Alpha generates signal (can use regime hint in future)
+        # 2. Alpha generates signal
         alpha_out = self.alpha.generate_signal()
         signal = alpha_out.get("signal", "hold")
         price = alpha_out.get("price")
 
-        # Adjust signal based on regime (simple example)
+        # Adjust signal based on regime
         strategy_hint = regime_out.get("strategy_hint", "neutral")
         if strategy_hint == "reduce_size_or_wait" and signal in ("buy", "sell"):
-            # Soften signal in high vol
             signal = "hold"
 
         if signal not in ("buy", "sell") or not price:
@@ -61,10 +69,19 @@ class ManagerAgent:
                 "status": self.execution.status(),
             }
 
-        # 3. Risk evaluates
+        # 3. Risk evaluates (pass ATR and regime for volatility adjustment)
         sig_1h = alpha_out.get("multi_tf", {}).get("timeframes", {}).get("1h", {})
         proposed_sl = sig_1h.get("stop_loss")
-        risk_out = self.risk.evaluate(signal, price, proposed_sl)
+        atr_pct = regime_out.get("atr_pct")
+        regime_name = regime_out.get("regime")
+
+        risk_out = self.risk.evaluate(
+            signal,
+            price,
+            proposed_sl,
+            atr_pct=atr_pct,
+            regime=regime_name,
+        )
 
         if risk_out.get("hard_stop"):
             stop_result = self.emergency_stop(reason="max_drawdown")
@@ -119,6 +136,10 @@ class ManagerAgent:
         status["trading_enabled"] = self.trading_enabled
         status["quarantine_mode"] = self.quarantine_mode
         status["current_regime"] = self.regime.classify()
+        status["risk_state"] = {
+            "consecutive_losses": self.risk._consecutive_losses,
+            "in_cooldown": self.risk._in_cooldown(),
+        }
         return status
 
     def emergency_stop(self, reason: str = "manual") -> Dict[str, Any]:
@@ -131,6 +152,9 @@ class ManagerAgent:
             try:
                 price = status.get("current_price") or status["position"]["entry"]
                 closed = self.execution.close(price, reason=f"emergency_stop:{reason}")
+                # Record emergency close as a loss for cooldown purposes
+                if closed and closed.get("pnl") is not None:
+                    self.risk.record_trade_result(float(closed["pnl"]))
             except Exception as e:
                 closed = {"error": str(e)}
 
