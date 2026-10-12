@@ -1,8 +1,6 @@
 """
 3-Dimension Market Analysis for ADA
-Enhanced with:
-- Pullback-to-support + rejection logic for bullish regime (Long)
-- Rally-to-resistance + rejection logic for bearish regime (Short)
+Enhanced with flexible high-quality setups for both Long and Short.
 """
 
 import os
@@ -23,8 +21,12 @@ class MarketAnalyzer:
         self.news = NewsSentiment()
         self.regime = RegimeAgent()
 
-        # Configurable proximity
-        self.sr_proximity_pct = float(os.getenv("SR_PROXIMITY_PCT", "1.5"))
+        # Configurable thresholds (more flexible defaults)
+        self.sr_proximity_pct = float(os.getenv("SR_PROXIMITY_PCT", "2.0"))
+        self.rsi_long_15m = float(os.getenv("RSI_LONG_15M", "45"))
+        self.rsi_long_1h = float(os.getenv("RSI_LONG_1H", "60"))
+        self.rsi_short_15m = float(os.getenv("RSI_SHORT_15M", "55"))
+        self.rsi_short_1h = float(os.getenv("RSI_SHORT_1H", "40"))
 
     def analyze(self) -> Dict[str, Any]:
         multi = self.multi.analyze()
@@ -43,8 +45,8 @@ class MarketAnalyzer:
         setup_quality = "none"
         setup_type = None
 
-        is_bullish_regime = regime.get("regime") == "trending_bull"
-        is_bearish_regime = regime.get("regime") == "trending_bear"
+        is_bullish_regime = regime.get("regime") in ("trending_bull", "mixed")
+        is_bearish_regime = regime.get("regime") in ("trending_bear", "mixed")
 
         near_support = False
         near_resistance = False
@@ -57,14 +59,14 @@ class MarketAnalyzer:
         rsi_15m = tf_15m.get("rsi", 50)
         rsi_1h = tf_1h.get("rsi", 50)
 
-        # High-quality Long: Pullback to support in bullish regime
-        if is_bullish_regime and near_support and rsi_15m < 40 and rsi_1h < 55:
+        # Flexible Long setup
+        if is_bullish_regime and near_support and rsi_15m < self.rsi_long_15m and rsi_1h < self.rsi_long_1h:
             recommendation = "buy"
             setup_quality = "high"
             setup_type = "pullback_to_support"
 
-        # High-quality Short: Rally to resistance in bearish regime
-        elif is_bearish_regime and near_resistance and rsi_15m > 60 and rsi_1h > 45:
+        # Flexible Short setup
+        elif is_bearish_regime and near_resistance and rsi_15m > self.rsi_short_15m and rsi_1h > self.rsi_short_1h:
             recommendation = "sell"
             setup_quality = "high"
             setup_type = "rally_to_resistance"

@@ -1,34 +1,34 @@
 # Systematic Trade Blueprint
 
-## สัญญาณคุณภาพสูง (High Quality Setup)
+## สัญญาณคุณภาพสูง (High Quality Setup) — เกณฑ์ยืดหยุ่น
 
 ### Long (Pullback to Support)
-1. **Regime_Agent** = `trending_bull`
-2. ราคาพักตัวลงมาใกล้ **1h Support Zone** (≤ 1.5%)
-3. บน 15m: RSI < 40 + บน 1h: RSI < 55
+1. Regime = `trending_bull` หรือ `mixed`
+2. ราคาใกล้แนวรับ ≤ **2.0%**
+3. RSI 15m < **45** และ RSI 1h < **60**
 
 ### Short (Rally to Resistance)
-1. **Regime_Agent** = `trending_bear`
-2. ราคาราลลี่ขึ้นมาใกล้ **1h Resistance Zone** (≤ 1.5%)
-3. บน 15m: RSI > 60 + บน 1h: RSI > 45
+1. Regime = `trending_bear` หรือ `mixed`
+2. ราคาใกล้แนวต้าน ≤ **2.0%**
+3. RSI 15m > **55** และ RSI 1h > **40**
 
-## เหตุผล
-
-- Long: 4h Bullish + 1h Pullback to Support + 15m Oversold
-- Short: 4h Bearish + 1h Rally to Resistance + 15m Overbought
-- ลดโอกาส Chop ใน Sideway เพราะ Regime กรองไว้
-
-## Risk Management
-
-| กฎ | ค่า |
-|-----|-----|
-| Risk per Trade | 1.5% |
-| Daily Loss Limit | 4% |
-| Max Drawdown Hard Stop | 12% |
-| Cooldown | ขาดทุนติด 4 ครั้ง → พัก 20 นาที |
-
-## ค่าที่ปรับได้
+## ค่าที่ปรับได้ใน `.env`
 
 ```bash
-SR_PROXIMITY_PCT=1.5
+SR_PROXIMITY_PCT=2.0
+RSI_LONG_15M=45
+RSI_LONG_1H=60
+RSI_SHORT_15M=55
+RSI_SHORT_1H=40
 ```
+
+## เปรียบเทียบกับเกณฑ์เดิม
+
+| เกณฑ์ | เดิม | ใหม่ (ยืดหยุ่น) |
+|--------|------|-----------------|
+| ระยะใกล้แนว | 1.5% | **2.0%** |
+| RSI Long 15m | < 40 | **< 45** |
+| RSI Long 1h | < 55 | **< 60** |
+| RSI Short 15m | > 60 | **> 55** |
+| RSI Short 1h | > 45 | **> 40** |
+| Regime | เฉพาะ trending | trending + mixed |
