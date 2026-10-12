@@ -34,11 +34,13 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt || pip install pandas requests python-dotenv
 
-      - name: Run Regime Accuracy Test (Binance)
+      - name: Run Regime Accuracy Test (Binance with API Key)
         env:
           PYTHONPATH: ${{ github.workspace }}
+          BINANCE_API_KEY: ${{ secrets.BINANCE_API_KEY }}
+          BINANCE_API_SECRET: ${{ secrets.BINANCE_API_SECRET }}
         run: |
-          echo "=== Regime_Agent Accuracy Test ==="
+          echo "=== Regime_Agent Accuracy Test (with API Key) ==="
           python -m src.backtest.regime_validator || echo "Regime test failed or limited data"
 
       - name: Run Synthetic Regime Test
@@ -62,6 +64,6 @@ jobs:
         if: always()
         run: |
           echo "## Accuracy Test Summary" >> $GITHUB_STEP_SUMMARY
-          echo "- Source: Binance (via GitHub Actions runner)" >> $GITHUB_STEP_SUMMARY
+          echo "- Source: Binance (with API Key from secrets)" >> $GITHUB_STEP_SUMMARY
           echo "- Regime validator and synthetic tests completed" >> $GITHUB_STEP_SUMMARY
           echo "- Check logs above for detailed results" >> $GITHUB_STEP_SUMMARY

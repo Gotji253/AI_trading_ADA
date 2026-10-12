@@ -6,8 +6,11 @@ Used by Hermes Agent ADA trading skill.
 
 import os
 import time
+import hmac
+import hashlib
 from datetime import datetime, timezone
 from typing import Optional, Dict, Any, List
+from urllib.parse import urlencode
 
 import requests
 import pandas as pd
@@ -23,6 +26,10 @@ class ADAPriceFetcher:
         self.preferred_source = preferred_source.lower()
         self.session = requests.Session()
         self.session.headers.update({"User-Agent": "AI_trading_ADA/1.0"})
+
+        # Binance API keys (optional)
+        self.binance_api_key = os.getenv("BINANCE_API_KEY", "")
+        self.binance_api_secret = os.getenv("BINANCE_API_SECRET", "")
 
     def get_current_price(self) -> Dict[str, Any]:
         """Get current ADA price snapshot."""
@@ -53,6 +60,12 @@ class ADAPriceFetcher:
         df = self._add_indicators(df)
         return df
 
+    def _binance_headers(self) -> Dict[str, str]:
+        headers = {}
+        if self.binance_api_key:
+            headers["X-MBX-APIKEY"] = self.binance_api_key
+        return headers
+
     # ---------- CoinGecko ----------
     def _coingecko_price(self) -> Dict[str, Any]:
         url = f"{self.COINGECKO_BASE}/simple/price"
@@ -77,7 +90,6 @@ class ADAPriceFetcher:
         }
 
     def _coingecko_ohlc(self, interval: str, limit: int) -> pd.DataFrame:
-        # CoinGecko market_chart for historical
         days = max(1, limit // 24) if interval == "1h" else 30
         url = f"{self.COINGECKO_BASE}/coins/cardano/market_chart"
         params = {"vs_currency": "usd", "days": str(days)}
@@ -90,7 +102,6 @@ class ADAPriceFetcher:
         df = pd.DataFrame(prices, columns=["timestamp_ms", "close"])
         df["timestamp"] = pd.to_datetime(df["timestamp_ms"], unit="ms", utc=True)
         df = df.set_index("timestamp")[["close"]]
-        # Approximate OHLC (CoinGecko simple endpoint is close-only for free)
         df["open"] = df["close"].shift(1)
         df["high"] = df["close"]
         df["low"] = df["close"]
@@ -102,7 +113,7 @@ class ADAPriceFetcher:
     def _binance_ticker(self) -> Dict[str, Any]:
         url = f"{self.BINANCE_BASE}/ticker/24hr"
         params = {"symbol": "ADAUSDT"}
-        r = self.session.get(url, params=params, timeout=15)
+        r = self.session.get(url, params=params, headers=self._binance_headers(), timeout=15)
         r.raise_for_status()
         data = r.json()
         return {
@@ -119,7 +130,7 @@ class ADAPriceFetcher:
     def _binance_klines(self, interval: str, limit: int) -> pd.DataFrame:
         url = f"{self.BINANCE_BASE}/klines"
         params = {"symbol": "ADAUSDT", "interval": interval, "limit": min(limit, 1000)}
-        r = self.session.get(url, params=params, timeout=20)
+        r = self.session.get(url, params=params, headers=self._binance_headers(), timeout=20)
         r.raise_for_status()
         raw = r.json()
         if not raw:
