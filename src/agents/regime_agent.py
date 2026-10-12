@@ -6,6 +6,7 @@ Regime_Agent — Enhanced Market Context Classifier
 - Volume confirmation
 - Confidence score
 - Configurable thresholds + hysteresis
+- Lowered minimum data requirement for small datasets
 """
 
 import os
@@ -29,32 +30,33 @@ class RegimeAgent:
         df_1h = self.fetcher.get_with_indicators("1h", lookback)
         df_4h = self.fetcher.get_with_indicators("4h", 80)
 
-        if df_1h.empty or len(df_1h) < 50:
+        # Lowered from 50 to 25
+        if df_1h.empty or len(df_1h) < 25:
             return {"status": "error", "regime": "unknown", "message": "Not enough data"}
 
         # --- 1h metrics ---
         close = df_1h["close"]
         returns = close.pct_change().dropna()
-        trend_pct = (close.iloc[-1] / close.iloc[-40] - 1) * 100
-        vol_pct = returns.std() * 100
+        look = min(30, len(close) - 1)
+        trend_pct = (close.iloc[-1] / close.iloc[-look] - 1) * 100 if look > 0 else 0
+        vol_pct = returns.std() * 100 if len(returns) > 2 else 0
 
         # ATR (14)
         atr = self._atr(df_1h, 14)
         atr_pct = (atr / close.iloc[-1] * 100) if atr and close.iloc[-1] else 0
 
-        # Volume confirmation (last 5 vs previous 20)
+        # Volume confirmation
         vol_ratio = self._volume_ratio(df_1h)
 
         # --- 4h EMA structure ---
         ema_bias = "neutral"
         ema200_ok = False
-        if not df_4h.empty and len(df_4h) >= 40:
+        if not df_4h.empty and len(df_4h) >= 15:
             last = df_4h.iloc[-1]
             p = last["close"]
             e20 = last.get("ema_20")
             e50 = last.get("ema_50")
-            # Approximate EMA200 if not present
-            e200 = last.get("ema_200") or df_4h["close"].ewm(span=200, adjust=False).mean().iloc[-1]
+            e200 = last.get("ema_200") or df_4h["close"].ewm(span=min(200, len(df_4h)), adjust=False).mean().iloc[-1]
 
             if e20 and e50:
                 if p > e20 > e50 > e200:
@@ -93,7 +95,16 @@ class RegimeAgent:
 
     def _atr(self, df: pd.DataFrame, period: int = 14) -> float:
         if len(df) < period + 1:
-            return 0.0
+            # Fallback for small data
+            if len(df) < 5:
+                return 0.0
+            high, low, close = df["high"], df["low"], df["close"]
+            tr = pd.concat([
+                high - low,
+                (high - close.shift()).abs(),
+                (low - close.shift()).abs()
+            ], axis=1).max(axis=1)
+            return float(tr.mean())
         high, low, close = df["high"], df["low"], df["close"]
         tr = pd.concat([
             high - low,
@@ -103,10 +114,10 @@ class RegimeAgent:
         return float(tr.rolling(period).mean().iloc[-1])
 
     def _volume_ratio(self, df: pd.DataFrame) -> float:
-        if "volume" not in df.columns or len(df) < 25:
+        if "volume" not in df.columns or len(df) < 10:
             return 1.0
-        recent = df["volume"].tail(5).mean()
-        older = df["volume"].iloc[-25:-5].mean()
+        recent = df["volume"].tail(min(5, len(df)//3)).mean()
+        older = df["volume"].iloc[: -min(5, len(df)//3)].mean() if len(df) > 5 else recent
         return float(recent / older) if older > 0 else 1.0
 
     def _classify(self, trend: float, vol: float, atr_pct: float, ema: str, vol_ratio: float) -> str:
