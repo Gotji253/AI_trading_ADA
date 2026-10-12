@@ -1,5 +1,6 @@
 """
-FastAPI server for Multi-Agent ADA trading system.
+FastAPI server for Multi-Asset Trading System.
+Supports: BTC, ETH, SOL, BNB, XRP
 
 Run:
   uvicorn src.api.main:app --reload --port 8000
@@ -8,21 +9,19 @@ Run:
 from fastapi import FastAPI, Query
 from fastapi.responses import JSONResponse
 
-from src.agents.manager import ManagerAgent
-from src.memory.learning_prompt import build_learning_prompt
-from src.memory.self_improve import SelfImprovementEngine
-from src.analysis.ai_analyzer import ADAAIAnalyzer
-from src.paper.trader import PaperTrader
+from src.agents.multi_asset_manager import MultiAssetManager
+from src.config.assets import get_trading_assets, get_asset_info
 
-app = FastAPI(title="AI_trading_ADA Multi-Agent", version="1.4.0")
-manager = ManagerAgent()
-engine = SelfImprovementEngine()
+app = FastAPI(title="Multi-Asset Trading System", version="2.0.0")
+manager = MultiAssetManager()
 
 
 @app.get("/")
 def root():
     return {
-        "message": "AI_trading_ADA Multi-Agent API",
+        "message": "Multi-Asset Trading API",
+        "version": "2.0.0",
+        "assets": get_trading_assets(),
         "status": "running",
         "trading_enabled": manager.trading_enabled,
         "quarantine": manager.quarantine_mode,
@@ -34,56 +33,54 @@ def status():
     return manager.get_status()
 
 
+@app.get("/assets")
+def list_assets():
+    assets = get_trading_assets()
+    return {
+        "assets": [
+            {"symbol": a, **get_asset_info(a)}
+            for a in assets
+        ]
+    }
+
+
 @app.post("/cycle")
 def run_cycle():
     result = manager.run_cycle()
     return JSONResponse(content=result)
 
 
-@app.get("/alpha")
-def alpha_signal():
-    return manager.alpha.generate_signal()
+@app.get("/analyze")
+def analyze_all():
+    return manager.analyze_all()
 
 
-@app.get("/risk")
-def risk_check(signal: str = Query("buy"), price: float = Query(0.0)):
-    return manager.risk.evaluate(signal, price)
+@app.get("/analyze/{symbol}")
+def analyze_symbol(symbol: str):
+    from src.data.multi_asset_fetcher import MultiAssetFetcher
+    from src.analysis.enhanced_analyzer import EnhancedAnalyzer
 
+    symbol = symbol.upper()
+    if not symbol.endswith("USDT"):
+        symbol = f"{symbol}USDT"
 
-@app.get("/performance/summary")
-def performance_summary():
-    status = manager.get_status()
-    stats = status.get("stats", {})
-    return {
-        "equity": status.get("equity"),
-        "balance": status.get("balance_usdt"),
-        "daily_pnl": status.get("daily_pnl"),
-        "total_trades": status.get("total_trades"),
-        "open_position": status.get("position") is not None,
-        "trading_enabled": status.get("trading_enabled", True),
-        "quarantine_mode": status.get("quarantine_mode", False),
-        "stats": stats,
-    }
+    fetcher = MultiAssetFetcher()
+    df = fetcher.get_ohlcv(symbol, "1h", 100)
 
+    if df is None or df.empty:
+        return {"status": "error", "message": f"No data for {symbol}"}
 
-@app.get("/history")
-def trade_history(limit: int = Query(20, ge=1, le=100)):
-    trader = PaperTrader(notify=False)
-    return {"trades": trader.history(limit=limit)}
-
-
-@app.post("/daily-summary")
-def daily_summary():
-    trader = PaperTrader(notify=True)
-    result = trader.daily_summary(send_telegram=True)
+    analyzer = EnhancedAnalyzer()
+    result = analyzer.analyze(df)
+    result["symbol"] = symbol
     return result
 
 
-@app.post("/learn/analyze")
-def learn_analyze():
-    """วังจร Self-Improvement เต็ม (วิเคราะห์ + แนะนำ + Validate)"""
-    result = engine.run_cycle()
-    return JSONResponse(content=result)
+@app.get("/prices")
+def get_prices():
+    from src.data.multi_asset_fetcher import MultiAssetFetcher
+    fetcher = MultiAssetFetcher()
+    return {"prices": fetcher.get_all_prices()}
 
 
 @app.post("/emergency/stop")
@@ -96,3 +93,8 @@ def emergency_stop():
 def emergency_resume():
     result = manager.resume()
     return JSONResponse(content=result)
+
+
+@app.get("/health")
+def health():
+    return {"status": "healthy", "assets": len(get_trading_assets())}
