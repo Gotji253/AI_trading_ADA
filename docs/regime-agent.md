@@ -1,32 +1,28 @@
-# Regime_Agent (Improved)
+# Regime_Agent (Enhanced)
 
-## สิ่งที่ปรับปรุง
+## ความสามารถที่เพิ่มขึ้น
 
-- ใช้ **1h + 4h** ร่วมกัน
-- เพิ่ม **EMA structure** บน 4h (EMA20 vs EMA50)
-- Threshold ปรับได้ผ่าน `.env`
-- มี **Hysteresis** เพื่อลดการสลับสภาวะบ่อยเกินไป
+- **ATR (14)** สำหรับวัด volatility
+- **EMA200** บน 4h สำหรับ macro bias
+- **Volume ratio** (ยืนยันความแข็ง)
+- **Confidence score** (0–1)
+- Multi-TF (1h + 4h) + Hysteresis
 
-## Regime ที่จำแนกได้
+## ผลลัพธ์เพิ่มเติม
 
-| Regime | เหตุผล | Strategy Hint |
-|--------|----------|---------------|
-| `trending_bull` | ตลาดขึ้นแรง + EMA bias bullish | trend_following |
-| `trending_bear` | ตลาดลงแรง + EMA bias bearish | trend_following |
-| `ranging` | Trend ต่ำ | mean_reversion |
-| `high_volatility` | Vol หรือ Range สูง | reduce_size_or_wait |
-| `mixed` | สภาวะปน | neutral |
-
-## ค่าที่ปรับได้ (`.env`)
-
-```bash
-REGIME_TREND_THRESHOLD=3.5
-REGIME_VOL_HIGH=4.5
-REGIME_RANGE_HIGH=2.8
-REGIME_RANGING_THRESHOLD=1.8
+```json
+{
+  "regime": "trending_bull",
+  "confidence": 0.78,
+  "strategy_hint": "trend_following",
+  "atr_pct": 1.42,
+  "volume_ratio": 1.15,
+  "ema_bias_4h": "strong_bull",
+  "ema200_aligned": true
+}
 ```
 
 ## การใช้งาน
 
-Regime จะถูกเรียกทุกครั้งที่ Manager รัน `/cycle`  
-และถูกใช้ปรับสัญญาณของ Alpha (โดยเฉพาะใน high volatility)
+Regime ถูกใช้ใน Manager ทุกครั้งที่รัน `/cycle`  
+Confidence สูง = สัญญาณน่าเชื่อถือมากขึ้น
