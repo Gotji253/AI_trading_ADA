@@ -1,28 +1,36 @@
-# Strict Risk Management Rules
+# Risk Management Rules (Improved)
 
-## 1. Risk Per Trade
-- ขนาดไม้ต่อตำแหน่งไม่เกิน **1% - 2%** ของ Equity ณ ขณะนั้น
-- ตั้งค่าด้วย `RISK_PER_TRADE_PCT` (ค่าเริ่มต้น 1.5)
+## กฎหลัก
 
-## 2. Daily Loss Limit
-- หากขาดทุนรวมในวันแตะ **3% - 5%** ของ Capital
-- ระบบสั่ง **Pause** การเทรดใหม่ทันทีจนกว่าวันถัดไป
-- ตั้งค่าด้วย `DAILY_LOSS_LIMIT_PCT` (ค่าเริ่มต้น 4)
+| กฎ | ค่าเริ่มต้น | คำอธิบาย |
+|-----|-----------|----------|
+| Risk per Trade | 1.5% | ความเสี่ยงสูงสุดต่อไม้ |
+| Daily Loss Limit | 4% | หยุดเทรดใหม่ในวันนั้น |
+| Max Drawdown Hard Stop | 12% | เข้า Quarantine Mode |
+| **Max Open Risk** | 3% | จำกัดความเสี่ยงรวม |
+| **Consecutive Loss Limit** | 3 ครั้ง | หยุดชั่วคราว |
+| **Cooldown** | 30 นาที | หลังขาดทุนติด |
 
-## 3. Max Drawdown Hard Stop
-- หาก Drawdown สะสมแตะ **10% - 15%**
-- ระบบยิง `/emergency/stop` อัตโนมัติ
-- เข้า **Quarantine Mode** (หยุดเทรดทั้งหมด)
-- ต้องทำ Debug / Backtest ใหม่ก่อนเปิดการเทรดใหม่
-- ตั้งค่าด้วย `MAX_DRAWDOWN_HARD_STOP_PCT` (ค่าเริ่มต้น 12)
+## สิ่งที่ปรับปรุงใหม่
 
-## การทำงาน
+### 1. Max Open Risk
+จำกัดความเสี่ยงรวมของทุกตำแหน่งไม่ให้เกินค่าที่กำหนด
 
-1. ทุกรอบ `/cycle` ระบบตรวจกฎทั้งหมด
-2. ถ้าถึง Max Drawdown → เข้า Quarantine อัตโนมัติ
-3. ถ้าถึง Daily Loss Limit → ปฏิเสธเทรดใหม่ในวันนั้น
-4. ขนาดไม้คำนวนจากระยะถึง SL ไม่เกินค่าที่กำหนด
+### 2. Volatility Adjustment
+- ATR > 2.5% → ลดขนาดไม้เหลือ 50%
+- ATR > 1.5% → ลดขนาดไม้เหลือ 25%
+- Regime = high_volatility → ลดขนาดไม้เพิ่ม
 
-## คำสั่งที่เกี่ยวข้อง
+### 3. Consecutive Loss Cooldown
+หลังขาดทุนติด 3 ครั้ง → หยุดเทรดใหม่ 30 นาที
 
-ดูใน `.env.example` และเอกสารไปใส่ `.env`
+## ค่าที่ปรับได้ใน `.env`
+
+```bash
+RISK_PER_TRADE_PCT=1.5
+DAILY_LOSS_LIMIT_PCT=4
+MAX_DRAWDOWN_HARD_STOP_PCT=12
+MAX_OPEN_RISK_PCT=3.0
+CONSECUTIVE_LOSS_LIMIT=3
+LOSS_COOLDOWN_MINUTES=30
+```
