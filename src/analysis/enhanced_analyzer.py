@@ -1,6 +1,6 @@
 """
-Enhanced Market Analyzer with Volume + Multi-TF Confirmation
-Relaxed criteria for more practical signals.
+Enhanced Market Analyzer - Very Flexible Criteria
+Volume + Multi-TF with relaxed thresholds.
 """
 
 import os
@@ -9,24 +9,23 @@ import pandas as pd
 
 
 class EnhancedAnalyzer:
-    """Analyzer with Volume + Multi-TF confirmation (relaxed)."""
+    """Very flexible analyzer with Volume + Multi-TF."""
 
     def __init__(self):
-        self.sr_proximity = float(os.getenv("SR_PROXIMITY_PCT", "2.5"))
-        self.volume_mult = float(os.getenv("VOLUME_MULTIPLIER", "0.8"))
+        self.sr_proximity = float(os.getenv("SR_PROXIMITY_PCT", "3.0"))
+        self.volume_mult = float(os.getenv("VOLUME_MULTIPLIER", "0.6"))
         self.min_tf_agreement = int(os.getenv("MIN_TF_AGREEMENT", "1"))
 
     def analyze(self, df_1h: pd.DataFrame, df_4h: Optional[pd.DataFrame] = None) -> Dict[str, Any]:
-        if df_1h is None or len(df_1h) < 25:
+        if df_1h is None or len(df_1h) < 20:
             return {"status": "error", "message": "Insufficient data"}
 
         price = float(df_1h["close"].iloc[-1])
 
-        # Multi-TF
         tf_signals = {}
         tf_signals["1h"] = self._tf_signal(df_1h)
 
-        if df_4h is None or len(df_4h) < 8:
+        if df_4h is None or len(df_4h) < 6:
             df_4h = self._resample(df_1h, "4h")
         tf_signals["4h"] = self._tf_signal(df_4h)
 
@@ -34,10 +33,8 @@ class EnhancedAnalyzer:
         bearish_count = sum(1 for s in tf_signals.values() if s.get("bias") == "bearish")
         agreement = max(bullish_count, bearish_count)
 
-        # Volume (relaxed)
         volume_ok = self._volume_confirmation(df_1h)
 
-        # Levels
         levels = self._find_levels(df_1h)
         near_support = self._near_level(price, levels.get("support"))
         near_resistance = self._near_level(price, levels.get("resistance"))
@@ -51,16 +48,14 @@ class EnhancedAnalyzer:
 
         multi_tf_ok = agreement >= self.min_tf_agreement
 
-        # Relaxed Long
-        if (regime in ("trending_bull", "mixed") and near_support and rsi < 50
-                and volume_ok and multi_tf_ok):
+        # Very flexible Long
+        if (regime != "trending_bear" and near_support and rsi < 52 and volume_ok and multi_tf_ok):
             signal = "buy"
             setup_type = "pullback_to_support"
             quality = "high"
 
-        # Relaxed Short
-        elif (regime in ("trending_bear", "mixed") and near_resistance and rsi > 50
-                and volume_ok and multi_tf_ok):
+        # Very flexible Short
+        elif (regime != "trending_bull" and near_resistance and rsi > 48 and volume_ok and multi_tf_ok):
             signal = "sell"
             setup_type = "rally_to_resistance"
             quality = "high"
@@ -82,24 +77,23 @@ class EnhancedAnalyzer:
         }
 
     def _tf_signal(self, df: pd.DataFrame) -> Dict[str, Any]:
-        if len(df) < 8:
-            return {"bias": "neutral", "rsi": 50}
+        if len(df) < 6:
+            return {"bias": "neutral"}
         close = df["close"]
-        ema = close.ewm(span=min(15, len(df)), adjust=False).mean().iloc[-1]
+        ema = close.ewm(span=min(10, len(df)), adjust=False).mean().iloc[-1]
         price = float(close.iloc[-1])
         bias = "bullish" if price > ema else "bearish"
-        rsi = self._rsi(close)
-        return {"bias": bias, "rsi": round(rsi, 1)}
+        return {"bias": bias}
 
     def _volume_confirmation(self, df: pd.DataFrame) -> bool:
-        if "volume" not in df.columns or len(df) < 15:
-            return True  # skip if no volume
+        if "volume" not in df.columns or len(df) < 10:
+            return True
         current_vol = float(df["volume"].iloc[-1])
-        avg_vol = float(df["volume"].tail(15).mean())
+        avg_vol = float(df["volume"].tail(10).mean())
         return current_vol >= avg_vol * self.volume_mult
 
     def _find_levels(self, df: pd.DataFrame) -> Dict[str, float]:
-        recent = df.tail(25)
+        recent = df.tail(20)
         return {
             "support": float(recent["low"].min()),
             "resistance": float(recent["high"].max()),
@@ -119,16 +113,14 @@ class EnhancedAnalyzer:
         return float(rsi.iloc[-1]) if len(rsi) > 0 else 50.0
 
     def _classify_regime(self, df: pd.DataFrame) -> str:
-        if len(df) < 12:
+        if len(df) < 10:
             return "unknown"
         close = df["close"]
-        trend = (float(close.iloc[-1]) / float(close.iloc[-12]) - 1) * 100
-        if trend > 3:
+        trend = (float(close.iloc[-1]) / float(close.iloc[-10]) - 1) * 100
+        if trend > 2.5:
             return "trending_bull"
-        elif trend < -3:
+        elif trend < -2.5:
             return "trending_bear"
-        elif abs(trend) < 2:
-            return "ranging"
         return "mixed"
 
     def _resample(self, df: pd.DataFrame, rule: str) -> pd.DataFrame:
