@@ -9,7 +9,7 @@ from datetime import datetime, timezone, date
 from pathlib import Path
 from typing import Optional, Dict, Any, List
 
-from src.config.assets import get_trading_assets, get_asset_info
+from src.assets_config import get_trading_assets, get_asset_info
 from src.data.multi_asset_fetcher import MultiAssetFetcher
 from src.analysis.enhanced_analyzer import EnhancedAnalyzer
 
@@ -44,7 +44,7 @@ class MultiAssetPaperTrader:
                 pass
         return {
             "balance": self.initial_balance,
-            "positions": {},  # symbol -> position dict
+            "positions": {},
             "trades": [],
             "equity_curve": [],
             "daily_pnl": {},
@@ -70,7 +70,10 @@ class MultiAssetPaperTrader:
 
     def _calculate_equity(self) -> float:
         equity = self.state["balance"]
-        prices = self.fetcher.get_all_prices()
+        try:
+            prices = self.fetcher.get_all_prices()
+        except Exception:
+            prices = {}
         for sym, pos in self.state.get("positions", {}).items():
             price = prices.get(sym, pos["entry"])
             if pos["side"] == "long":
@@ -80,25 +83,20 @@ class MultiAssetPaperTrader:
         return equity
 
     def _check_risk_limits(self) -> Optional[str]:
-        """Return error message if risk limit hit, else None."""
-        # Daily loss limit
         equity = self._calculate_equity()
         daily_pnl = self._daily_pnl()
         if equity > 0 and abs(min(daily_pnl, 0)) / equity * 100 >= self.daily_loss_limit:
             return f"Daily loss limit ({self.daily_loss_limit}%) reached"
 
-        # Max drawdown
         peak = max([e["equity"] for e in self.state.get("equity_curve", [])] + [self.initial_balance])
         if peak > 0 and (peak - equity) / peak * 100 >= self.max_drawdown:
             self.state["quarantine"] = True
             self._save_state()
             return f"Max drawdown ({self.max_drawdown}%) hit - quarantine mode"
 
-        # Max positions
         if self._open_positions_count() >= self.max_positions:
             return f"Max positions ({self.max_positions}) reached"
 
-        # Daily trades
         if self._trades_today() >= self.max_daily_trades:
             return f"Daily trade limit ({self.max_daily_trades}) reached"
 
@@ -108,7 +106,10 @@ class MultiAssetPaperTrader:
         return None
 
     def status(self) -> Dict[str, Any]:
-        prices = self.fetcher.get_all_prices()
+        try:
+            prices = self.fetcher.get_all_prices()
+        except Exception:
+            prices = {}
         equity = self._calculate_equity()
         return {
             "mode": "paper_multi",
@@ -127,7 +128,6 @@ class MultiAssetPaperTrader:
     def open_position(self, symbol: str, side: str, price: float,
                       stop_loss: Optional[float] = None,
                       take_profit: Optional[float] = None) -> Dict[str, Any]:
-        """Open a paper position for a symbol."""
         symbol = symbol.upper()
         if not symbol.endswith("USDT"):
             symbol = f"{symbol}USDT"
@@ -139,15 +139,14 @@ class MultiAssetPaperTrader:
         if symbol in self.state.get("positions", {}):
             return {"status": "error", "message": f"Already have position in {symbol}"}
 
-        # Position sizing based on risk
         risk_amount = self.state["balance"] * (self.risk_per_trade / 100)
         if stop_loss and abs(price - stop_loss) > 0:
             qty = risk_amount / abs(price - stop_loss)
         else:
-            qty = risk_amount / (price * 0.02)  # default 2% risk
+            qty = risk_amount / (price * 0.02)
 
         cost = qty * price
-        if cost > self.state["balance"] * 0.3:  # max 30% per position
+        if cost > self.state["balance"] * 0.3:
             qty = (self.state["balance"] * 0.3) / price
             cost = qty * price
 
@@ -181,7 +180,6 @@ class MultiAssetPaperTrader:
         }
 
     def close_position(self, symbol: str, price: float, reason: str = "manual") -> Dict[str, Any]:
-        """Close a paper position."""
         symbol = symbol.upper()
         if not symbol.endswith("USDT"):
             symbol = f"{symbol}USDT"
@@ -241,9 +239,11 @@ class MultiAssetPaperTrader:
         self.state["equity_curve"] = self.state["equity_curve"][-500:]
 
     def check_sl_tp(self) -> List[Dict[str, Any]]:
-        """Check stop-loss and take-profit for all positions."""
         results = []
-        prices = self.fetcher.get_all_prices()
+        try:
+            prices = self.fetcher.get_all_prices()
+        except Exception:
+            return results
 
         for symbol, pos in list(self.state.get("positions", {}).items()):
             price = prices.get(symbol)
@@ -274,11 +274,8 @@ class MultiAssetPaperTrader:
         return results
 
     def run_cycle(self) -> Dict[str, Any]:
-        """Run one trading cycle: check SL/TP, analyze, open positions."""
-        # Check SL/TP first
         sl_tp_results = self.check_sl_tp()
 
-        # Check risk limits
         risk_error = self._check_risk_limits()
         if risk_error:
             return {
@@ -288,13 +285,15 @@ class MultiAssetPaperTrader:
                 "paper_status": self.status(),
             }
 
-        # Analyze all assets
-        data = self.fetcher.get_multi_asset_data(interval="1h", limit=100)
-        signals = []
+        try:
+            data = self.fetcher.get_multi_asset_data(interval="1h", limit=100)
+        except Exception as e:
+            return {"status": "error", "message": str(e)}
 
+        signals = []
         for symbol, df in data.items():
             if symbol in self.state.get("positions", {}):
-                continue  # already have position
+                continue
             try:
                 analysis = self.analyzer.analyze(df)
                 if analysis.get("quality") == "high" and analysis.get("signal") in ("buy", "sell"):
@@ -307,7 +306,6 @@ class MultiAssetPaperTrader:
             except Exception:
                 continue
 
-        # Open positions for signals (up to max)
         actions = []
         for sig in signals[:self.max_positions - self._open_positions_count()]:
             side = "long" if sig["signal"] == "buy" else "short"
@@ -315,7 +313,6 @@ class MultiAssetPaperTrader:
             if not price:
                 continue
 
-            # Simple SL/TP based on ATR-like percentage
             sl_pct = 2.0
             tp_pct = 4.0
             if side == "long":
@@ -340,7 +337,6 @@ class MultiAssetPaperTrader:
         return self.state.get("trades", [])[-limit:]
 
     def reset(self):
-        """Reset paper trading state."""
         self.state = {
             "balance": self.initial_balance,
             "positions": {},

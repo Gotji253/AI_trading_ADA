@@ -9,7 +9,7 @@ import pandas as pd
 from typing import Optional, Dict, List
 from datetime import datetime
 
-from src.config.assets import get_trading_assets, get_asset_info
+from src.assets_config import get_trading_assets, get_asset_info
 
 
 class MultiAssetFetcher:
@@ -22,12 +22,9 @@ class MultiAssetFetcher:
 
     def get_ohlcv(self, symbol: str, interval: str = "1h", limit: int = 100) -> Optional[pd.DataFrame]:
         """Fetch OHLCV for a single asset."""
-        # Try Binance first
         df = self._binance_klines(symbol, interval, limit)
         if df is not None and not df.empty:
             return df
-
-        # Fallback to Crypto.com
         return self._crypto_com_candlestick(symbol, interval, limit)
 
     def get_all_prices(self) -> Dict[str, float]:
@@ -79,7 +76,6 @@ class MultiAssetFetcher:
 
     def _crypto_com_candlestick(self, symbol: str, interval: str, limit: int) -> Optional[pd.DataFrame]:
         try:
-            # Convert symbol format: BTCUSDT -> BTC_USDT
             cc_symbol = symbol.replace("USDT", "_USDT")
             url = f"{self.crypto_com_base}/get-candlestick"
             params = {"instrument_name": cc_symbol, "timeframe": interval}
@@ -103,16 +99,3 @@ class MultiAssetFetcher:
             return df[["open", "high", "low", "close", "volume"]].tail(limit)
         except Exception:
             return None
-
-
-def main():
-    fetcher = MultiAssetFetcher()
-    print(f"Trading assets: {fetcher.assets}")
-    prices = fetcher.get_all_prices()
-    for sym, price in prices.items():
-        info = get_asset_info(sym)
-        print(f"{info['name']}: ${price:,.2f}")
-
-
-if __name__ == "__main__":
-    main()
