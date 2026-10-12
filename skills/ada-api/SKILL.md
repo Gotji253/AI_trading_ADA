@@ -1,7 +1,7 @@
 ---
 name: ada-api
-description: Control the ADA Multi-Agent system via FastAPI. Run cycles, check status, get history/performance, daily summary, learning analysis, or emergency stop/resume.
-version: 1.1.0
+description: Control the ADA Multi-Agent trading system via FastAPI. Run cycles, check status, performance, history, learning, or emergency stop/resume. Just put API keys in .env and run.
+version: 1.2.0
 author: AI_trading_ADA
 license: MIT
 platforms: [linux, macos, windows]
@@ -12,79 +12,75 @@ metadata:
     requires_toolsets: [terminal]
 ---
 
-# ADA FastAPI Skill
+# ADA FastAPI Skill (Ready to Run)
 
-Hermes ใช้ skill นี้เพื่อสั่งงานระบบ Multi-Agent ผ่าน HTTP API
+Hermes ใช้ skill นี้เพื่อสั่งงานระบบ AI_trading_ADA ผ่าน HTTP API
 
-## Prerequisites
-
-FastAPI server ต้องรันอยู่ที่ `http://localhost:8000` ("หรือตั้ง `ADA_API_BASE` ใน environment ถ้าต่างกัน)
+## การติดตั้งแบบพร้อมใช้งาน (ครั้งเดียว)
 
 ```bash
-uvicorn src.api.main:app --port 8000
+# 1. คัดลอกและติดตั้ง skill
+mkdir -p ~/.hermes/skills/finance
+cp -r skills/ada-api ~/.hermes/skills/finance/
+
+# 2. ใส่ API key ใน .env (ถ้ายังไม่ได้ใส่)
+cp .env.example .env
+# แก้ไข OPENROUTER_API_KEY, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
+
+# 3. รัน FastAPI server
+uvicorn src.api.main:app --host 0.0.0.0 --port 8000
 ```
 
-## Base URL
+## การใช้งานใน Hermes
 
-ใช้ตัวแปรนี้ถ้าต้องการเปลี่ยน URL:
-```bash
-export ADA_API_BASE=http://localhost:8000
+พิมพ์ `/ada-api` แล้วตามด้วยคำสั่ง เช่น:
+
+```
+/ada-api
+ดูสถานะบัญชี
+
+/ada-api
+รันรอบเทรดหนึ่งรอบ
+
+/ada-api
+สรุปผลงาน
+
+/ada-api
+ประวัติการเทรด
+
+/ada-api
+สรุปประจำวัน
+
+/ada-api
+emergency stop
+
+/ada-api
+resume
 ```
 
-## Commands (via terminal + curl)
+## คำสั่งที่รองรับ
 
-แทน `$ADA_API_BASE` ด้วยค่าจริง หรือใช้ `http://localhost:8000`
-
-### ดูสถานะ
-```bash
-curl -s ${ADA_API_BASE:-http://localhost:8000}/status
-```
-
-### รันรอบตัดสินใจ (Alpha → Risk → Execution)
-```bash
-curl -s -X POST ${ADA_API_BASE:-http://localhost:8000}/cycle
-```
-
-### สรุปผลงาน
-```bash
-curl -s ${ADA_API_BASE:-http://localhost:8000}/performance/summary
-```
-
-### ประวัติการเทรด
-```bash
-curl -s "${ADA_API_BASE:-http://localhost:8000}/history?limit=10"
-```
-
-### สรุปประจำวัน (ส่ง Telegram)
-```bash
-curl -s -X POST ${ADA_API_BASE:-http://localhost:8000}/daily-summary
-```
-
-### วิเคราะห์และเรียนรู้
-```bash
-curl -s -X POST ${ADA_API_BASE:-http://localhost:8000}/learn/analyze
-```
-
-### Emergency Stop (ปิดทุกตำแหน่ง + หยุดเทรด)
-```bash
-curl -s -X POST ${ADA_API_BASE:-http://localhost:8000}/emergency/stop
-```
-
-### Resume (เปิดการเทรดใหม่)
-```bash
-curl -s -X POST ${ADA_API_BASE:-http://localhost:8000}/emergency/resume
-```
+| คำสั่ง | Endpoint |
+|--------|----------|
+| ดูสถานะ / status | `GET /status` |
+| รันรอบ / cycle | `POST /cycle` |
+| สรุปผล / performance | `GET /performance/summary` |
+| ประวัติ / history | `GET /history` |
+| สรุปประจำวัน / daily | `POST /daily-summary` |
+| เรียนรู้ / learn | `POST /learn/analyze` |
+| emergency stop | `POST /emergency/stop` |
+| resume | `POST /emergency/resume` |
 
 ## Procedure
 
-1. ใช้ `terminal` tool รัน curl ตามคำสั่งข้างบน
-2. ถ้า response ไม่ใช่ JSON ที่ถูกต้อง ให้บอกผู้ใช้ว่าเซิร์ฟเวอร์ไม่รัน
-3. อ่าน JSON แล้วสรุปเป็นภาษาไทยให้ผู้ใช้เข้าใจง่าย
-4. ถ้าเป็น emergency stop ให้ยืนยันว่าระบบถูกหยุดแล้ว
-5. ถ้าต้องการ resume ให้บอกผู้ใช้ว่าเปิดการเทรดได้แล้ว
+1. ใช้ `terminal` tool รัน curl ไปที่ endpoint ที่เกี่ยวข้อง
+2. Base URL คือ `http://localhost:8000` (หรือตั้ง `ADA_API_BASE` ถ้าต่างกัน)
+3. อ่าน JSON response แล้วสรุปเป็นภาษาไทยให้ผู้ใช้เข้าใจง่าย
+4. ถ้าเซิร์ฟเวอร์ไม่รัน ให้บอกผู้ใช้รัน `uvicorn src.api.main:app --port 8000`
+5. ถ้าเป็น emergency stop ให้ยืนยันว่าระบบถูกหยุดแล้ว
 
 ## Safety
 
-- Paper mode only
-- Emergency stop ปิดตำแหน่งทันทีและหยุดการเทรดใหม่
+- เป็น Paper mode เท่านั้น
+- Emergency stop ปิดตำแหน่งทั้งหมดและหยุดการเทรดใหม่
 - ใช้ resume เพื่อเปิดการเทรดใหม่

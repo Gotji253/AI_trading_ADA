@@ -1,65 +1,71 @@
 # Hermes ↔ FastAPI Integration
 
-## 1. รัน FastAPI Server
+## ติดตั้งแบบพร้อมใช้งาน (ใส่ API Key แล้วรันได้เลย)
+
+### วิธีที่ 1: ใช้สคริปต์ (แนะนำ)
 
 ```bash
-uvicorn src.api.main:app --reload --port 8000
+bash scripts/setup_hermes.sh
 ```
 
-## 2. ติดตั้ง Skill ใน Hermes
+### วิธีที่ 2: ทำมือเอง
 
 ```bash
+# 1. คัดลอก skill
 mkdir -p ~/.hermes/skills/finance
 cp -r skills/ada-api ~/.hermes/skills/finance/
+
+# 2. ตั้งค่า API key
+cp .env.example .env
+# แก้ไขใน .env:
+#   OPENROUTER_API_KEY=sk-or-v1-...
+#   TELEGRAM_BOT_TOKEN=...
+#   TELEGRAM_CHAT_ID=...
+
+# 3. รัน server
+uvicorn src.api.main:app --host 0.0.0.0 --port 8000
 ```
 
-## 3. (แนะนำ) ตั้ง Base URL
-
-```bash
-export ADA_API_BASE=http://localhost:8000
-```
-
-## 4. ใช้งานใน Hermes
+## การใช้งานใน Hermes
 
 ```
 /ada-api
-ดูสถานะบัญชี
+ดูสถานะ
 
 /ada-api
-รันรอบเทรดหนึ่งรอบ
+รันรอบเทรด
 
 /ada-api
 สรุปผลงาน
 
 /ada-api
-ประวัติการเทรด
-
-/ada-api
-สรุปประจำวัน
-
-/ada-api
 emergency stop
-
-/ada-api
-resume
 ```
 
-## Endpoints ทั้งหมด
+## API Keys ที่ต้องใช้
+
+| Key | จำเป็น | จำเป็นไม่ |
+|-----|--------|-----------|
+| `OPENROUTER_API_KEY` | AI Analysis, Learning | ส่วน AI ใช้ไม่ได้ |
+| `TELEGRAM_BOT_TOKEN` | แจ้งเตือน | ส่วนแจ้งเตือนใช้ไม่ได้ |
+| `TELEGRAM_CHAT_ID` | แจ้งเตือน | ส่วนแจ้งเตือนใช้ไม่ได้ |
+| `BINANCE_API_KEY` | ดึงราคา (optional) | ใช้ public endpoint ได้ |
+
+## Endpoints
 
 | Method | Path | คำอธิบาย |
 |--------|------|----------|
-| GET | `/status` | สถานะบัญชี + trading_enabled |
-| POST | `/cycle` | รันรอบตัดสินใจ (Alpha → Risk → Execution) |
+| GET | `/status` | สถานะบัญชี |
+| POST | `/cycle` | รันรอบตัดสินใจ |
 | GET | `/performance/summary` | สถิติผลงาน |
-| GET | `/history?limit=20` | ประวัติการเทรด |
-| POST | `/daily-summary` | ส่งสรุปประจำวันไป Telegram |
-| POST | `/learn/analyze` | วิเคราะห์ + แนะนำการปรับปรุง |
-| POST | `/emergency/stop` | ปิดทุกตำแหน่ง + หยุดเทรด |
-| POST | `/emergency/resume` | เปิดการเทรดใหม่ |
+| GET | `/history` | ประวัติการเทรด |
+| POST | `/daily-summary` | ส่งสรุปประจำวัน |
+| POST | `/learn/analyze` | วิเคราะห์และเรียนรู้ |
+| POST | `/emergency/stop` | หยุดระบบทันที |
+| POST | `/emergency/resume` | เปิดระบบใหม่ |
 
 ## หมายเหตุ
 
-- Hermes เป็น Voice/Chat Interface
-- FastAPI เป็นตัวประมวลผลการทำงานจริง
-- แยกบทบาทชัดเจน (Alpha / Risk / Execution)
-- มี Kill Switch + Resume
+- ยังเป็น Paper mode
+- Hermes เป็น Chat Interface, FastAPI เป็นตัวประมวลผล
+- มี Emergency Stop + Resume
